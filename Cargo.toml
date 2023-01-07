@@ -1,0 +1,17 @@
+[package]
+name = "itsy-gitsy"
+version = "0.1.0"
+edition = "2021"
+authors = ["Trevor Bentley <gitsy@trevorbentley.com>"]
+description = "Static site generator for git repositories"
+keywords = ["git", "website", "frontend", "development"]
+categories = ["command-line-utilities", "development-tools"]
+homepage = "https://github.com/mrmekon/itsy-gitsy"
+repository = "https://github.com/mrmekon/itsy-gitsy"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+git2 = "0.15.0"
