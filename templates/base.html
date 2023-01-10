@@ -1,0 +1,17 @@
+<html>
+<head>
+{% block html_head -%}
+<title>{{site_name}}</title>
+{% block html_head_extra -%}
+{% endblock html_head_extra -%}
+{% endblock html_head -%}
+</head>
+
+<body style="font-family: monospace;">
+{% block header -%}{% include "header.html" -%}{% endblock header -%}
+
+{% block content %}{% endblock content %}
+
+{% block footer -%}{% include "footer.html" -%}{% endblock footer -%}
+</body>
+</html>

@@ -1,3 +1,6 @@
+{% extends "base.html" %}
+
+{% block content %}
 <table class="files">
   <tr>
     <th>File</th>
@@ -15,3 +18,4 @@
     <td class="file-size">{{file.size}}</td>
   </tr>
   {% endfor -%}
+{% endblock content %}

@@ -2,10 +2,20 @@ site_name = "Trevor's Repos"
 site_url = "https://git.trevorbentley.com"
 site_description = "A bunch of git repos in a stupid format."
 
+render_markdown = true
+syntax_highlight = true
+syntax_highlight_theme = "base16-ocean.light"
+
 output_dir = "gen/"
 
 recursive_repo_dirs = ["repos/"]
 
+# TODO: specify limits
+# TODO: specify output directories/filenames
+# TODO: extra metadata for recursive repo listings
+# TODO: per-site and per-repo resources (just copied to output dir)
+# TODO: enable/disable markdown/highlighting
+# TODO: highlighting theme, extensions
 [gitsy_templates]
 path = "templates/"
 repo_list = "repos.html"
@@ -15,8 +25,6 @@ branch = "branch.html"
 tag = "tag.html"
 file = "file.html"
 dir = "dir.html"
-header = "header.html"
-footer = "footer.html"
 error = "404.html"
 
 [gitsy_extra]
@@ -28,3 +36,5 @@ or_bools = true
 path = "more_repos/circadian"
 website = "https://circadian.trevorbentley.com"
 attributes = {some_extra_thing = "user defined", visible = false, number_of_bananas = 3}
+render_markdown = false
+syntax_highlighting = false

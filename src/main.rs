@@ -12,6 +12,17 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use tera::{Context, Filter, Function, Tera, Value, to_value, try_get_value};
 
+#[cfg(feature = "markdown")]
+use pulldown_cmark::{html, Options, Parser as MdParser};
+
+#[cfg(any(feature = "highlight", feature = "highlight_fast"))]
+use syntect::{
+    html::{ClassedHTMLGenerator, ClassStyle, css_for_theme_with_class_style},
+    parsing::SyntaxSet,
+    highlighting::ThemeSet,
+    util::LinesWithEndings,
+};
+
 fn ts_to_date(ts: i64, offset: Option<i64>, format: Option<String>) -> String {
     let offset = offset.unwrap_or(0);
     let dt = NaiveDateTime::from_timestamp_opt(ts + offset, 0).expect("Invalid timestamp");
@@ -97,6 +108,8 @@ struct GitFile {
     is_binary: bool,
     size: usize,
     contents: Option<String>,
+    contents_safe: bool,
+    contents_preformatted: bool,
 }
 
 #[derive(Serialize, Default)]
@@ -164,6 +177,8 @@ fn walk_file_tree(repo: &git2::Repository, rev: &str, files: &mut Vec<GitFile>,
             is_binary,
             size,
             contents: None,
+            contents_safe: false,
+            contents_preformatted: true,
         });
         if recurse && entry.kind() == Some(git2::ObjectType::Tree) {
             let prefix = name + "/";
@@ -455,12 +470,61 @@ fn parse_commit(repo: &Repository, refr: &str) -> Result<GitObject, Error> {
     Ok(summary)
 }
 
-fn fill_file_contents(repo: &Repository, file: &GitFile) -> Result<GitFile, Error> {
+#[cfg(feature = "markdown")]
+fn parse_markdown(contents: &str) -> String {
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+    options.insert(Options::ENABLE_TABLES);
+    let parser = MdParser::new_ext(contents, options);
+    let mut html_output: String = String::with_capacity(contents.len() * 3 / 2);
+    html::push_html(&mut html_output, parser);
+    html_output
+}
+
+#[cfg(any(feature = "highlight", feature = "highlight_fast"))]
+fn syntax_highlight(contents: &str, extension: &str) -> String {
+    let syntax_set = SyntaxSet::load_defaults_newlines();
+    let syntax = match syntax_set.find_syntax_by_extension(extension) {
+        Some(s) => s,
+        _ => { return contents.to_string(); },
+    };
+    let mut html_generator = ClassedHTMLGenerator::new_with_class_style(syntax, &syntax_set, ClassStyle::Spaced);
+    for line in LinesWithEndings::from(contents) {
+        match html_generator.parse_html_for_line_which_includes_newline(line) {
+            Ok(_) => {},
+            Err(_) => {
+                println!("Warning: failed to apply syntax highlighting.");
+                return contents.to_string();
+            },
+        }
+    }
+    html_generator.finalize()
+}
+
+fn fill_file_contents(repo: &Repository, file: &GitFile, settings: &GitsySettingsRepo) -> Result<GitFile, Error> {
     let mut file = file.clone();
     if file.kind == "file" {
         let blob = repo.find_blob(git2::Oid::from_str(&file.id)?)?;
         file.contents = match blob.is_binary() {
-            false => Some(String::from_utf8_lossy(blob.content()).to_string()),
+            false => {
+                let path = Path::new(&file.path);
+                let cstr = String::from_utf8_lossy(blob.content()).to_string();
+                let (content, rendered, pre) = match path.extension() {
+                    #[cfg(feature = "markdown")]
+                    Some(x) if settings.render_markdown.unwrap_or(false) && x == "md" => {
+                        let (cstr, rendered, pre) = (parse_markdown(&cstr), true, false);
+                        (cstr, rendered, pre)
+                    },
+                    #[cfg(any(feature = "highlight", feature = "highlight_fast"))]
+                    Some(x) if settings.syntax_highlight.unwrap_or(false) => {
+                        (syntax_highlight(&cstr, x.to_string_lossy().to_string().as_str()), true, true)
+                    },
+                    _ => (cstr, false, true),
+                };
+                file.contents_safe = rendered;
+                file.contents_preformatted = pre;
+                Some(content)
+            },
             true => Some(format!("[Binary data ({} bytes)]", blob.content().len())),
         };
     }
@@ -570,6 +634,9 @@ struct GitsySettings {
     site_description: Option<String>,
     #[serde(rename(deserialize = "gitsy_templates"))]
     templates: GitsySettingsTemplates,
+    render_markdown: Option<bool>,
+    syntax_highlight: Option<bool>,
+    syntax_highlight_theme: Option<String>,
     #[serde(rename(deserialize = "gitsy_extra"))]
     extra: Option<BTreeMap<String, toml::Value>>,
 }
@@ -577,8 +644,6 @@ struct GitsySettings {
 #[derive(Deserialize)]
 struct GitsySettingsTemplates {
     path: PathBuf,
-    header: Option<String>,
-    footer: Option<String>,
     repo_list: Option<String>,
     repo_summary: Option<String>,
     commit: Option<String>,
@@ -595,6 +660,9 @@ struct GitsySettingsRepo {
     name: Option<String>,
     description: Option<String>,
     website: Option<String>,
+    render_markdown: Option<bool>,
+    syntax_highlight: Option<bool>,
+    syntax_highlight_theme: Option<String>,
     attributes: BTreeMap<String, toml::Value>,
 }
 
@@ -611,14 +679,8 @@ impl PartialEq for GitsySettingsRepo {
 }
 impl Eq for GitsySettingsRepo {}
 
-fn write_rendered(file: &mut File, rendered: &str, header: Option<&str>, footer: Option<&str>) {
-    if let Some(header) = header {
-        file.write(header.as_bytes()).expect("failed to save rendered html");
-    }
+fn write_rendered(file: &mut File, rendered: &str) {
     file.write(rendered.as_bytes()).expect("failed to save rendered html");
-    if let Some(footer) = footer {
-        file.write(footer.as_bytes()).expect("failed to save rendered html");
-    }
 }
 
 fn main() {
@@ -667,6 +729,9 @@ fn main() {
                     let dir = dir.expect("Repo contains invalid entries");
                     repo_descriptions.insert(GitsySettingsRepo {
                         path: dir.path().clone(),
+                        render_markdown: settings.render_markdown.clone(),
+                        syntax_highlight: settings.syntax_highlight.clone(),
+                        syntax_highlight_theme: settings.syntax_highlight_theme.clone(),
                         ..Default::default()
                     });
                 }
@@ -729,14 +794,6 @@ fn main() {
         }
         local_ctx.insert("site_generated_ts", &generated_dt.timestamp());
         local_ctx.insert("site_generated_offset", &generated_dt.offset().local_minus_utc());
-        let header: Option<String> = match &settings.templates.header {
-            Some(header) => Some(tera.render(header, &local_ctx).expect("Unable to templatize header file")),
-            _ => None,
-        };
-        let footer: Option<String> = match &settings.templates.footer {
-            Some(footer) => Some(tera.render(footer, &local_ctx).expect("Unable to templatize footer file")),
-            _ => None,
-        };
 
         match tera.render(&settings.templates.repo_summary.as_deref().unwrap_or("summary.html"), &local_ctx) {
             Ok(rendered) => {
@@ -745,7 +802,7 @@ fn main() {
                 let _ = std::fs::create_dir(output_path.to_str().expect("Output path not set!"));
                 output_path.push("summary.html");
                 let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-                write_rendered(&mut file, &rendered, header.as_deref(), footer.as_deref());
+                write_rendered(&mut file, &rendered);
             },
             Err(x) => match x.kind {
                 tera::ErrorKind::TemplateNotFound(_) if settings.templates.repo_summary.is_none() => {},
@@ -763,7 +820,7 @@ fn main() {
                     let _ = std::fs::create_dir(output_path.to_str().expect("Output path not set!"));
                     output_path.push(format!("{}.html", branch.full_hash));
                     let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-                    write_rendered(&mut file, &rendered, header.as_deref(), footer.as_deref());
+                    write_rendered(&mut file, &rendered);
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.branch.is_none() => {},
@@ -786,7 +843,7 @@ fn main() {
                     let _ = std::fs::create_dir(output_path.to_str().expect("Output path not set!"));
                     output_path.push(format!("{}.html", tag.full_hash));
                     let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-                    write_rendered(&mut file, &rendered, header.as_deref(), footer.as_deref());
+                    write_rendered(&mut file, &rendered);
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.tag.is_none() => {},
@@ -807,7 +864,7 @@ fn main() {
                     let _ = std::fs::create_dir(output_path.to_str().expect("Output path not set!"));
                     output_path.push(format!("{}.html", commit.full_hash));
                     let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-                    write_rendered(&mut file, &rendered, header.as_deref(), footer.as_deref());
+                    write_rendered(&mut file, &rendered);
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.commit.is_none() => {},
@@ -817,8 +874,28 @@ fn main() {
             local_ctx.remove("commit");
         }
 
+        // TODO: most of these generation blocks can be done in
+        // parallel.  This one is particularly costly, especially with
+        // markdown+highlighting, and would probably benefit from it.
+        // A potential drawback is that each parallel run needs a
+        // clone of the Tera context.
+        #[cfg(any(feature = "highlight", feature = "highlight_fast"))]
+        {
+            let ts = ThemeSet::load_defaults();
+            let theme = ts.themes.get(repo_desc.syntax_highlight_theme.as_deref()
+                                      .unwrap_or("base16-ocean.light")).expect("Invalid syntax highlighting theme specified.");
+            let css: String = css_for_theme_with_class_style(theme, syntect::html::ClassStyle::Spaced)
+                .expect("Invalid syntax highlighting theme specified.");
+            let mut output_path = settings.output_dir.clone();
+            output_path.push(&summary.name);
+            output_path.push("file");
+            output_path.push("syntax.css");
+            let mut file = std::fs::File::create(output_path.to_str().expect("CSS filename invalid!")).expect("CSS path not writeable!");
+            file.write(css.as_bytes()).expect("Failed to write CSS file!");
+        }
+
         for file in summary.all_files.iter().filter(|x| x.kind == "file") {
-            let file = fill_file_contents(&repo, &file).expect("Failed to parse file.");
+            let file = fill_file_contents(&repo, &file, &repo_desc).expect("Failed to parse file.");
             local_ctx.try_insert("file", &file).expect("Failed to add file to template engine.");
             match tera.render(&settings.templates.file.as_deref().unwrap_or("file.html"), &local_ctx) {
                 Ok(rendered) => {
@@ -828,7 +905,7 @@ fn main() {
                     let _ = std::fs::create_dir(output_path.to_str().expect("Output path not set!"));
                     output_path.push(format!("{}.html", file.id));
                     let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-                    write_rendered(&mut file, &rendered, header.as_deref(), footer.as_deref());
+                    write_rendered(&mut file, &rendered);
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.file.is_none() => {},
@@ -849,7 +926,7 @@ fn main() {
                     let _ = std::fs::create_dir(output_path.to_str().expect("Output path not set!"));
                     output_path.push(format!("{}.html", dir.id));
                     let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-                    write_rendered(&mut file, &rendered, header.as_deref(), footer.as_deref());
+                    write_rendered(&mut file, &rendered);
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.dir.is_none() => {},
@@ -878,21 +955,13 @@ fn main() {
     }
     global_ctx.insert("site_generated_ts", &generated_dt.timestamp());
     global_ctx.insert("site_generated_offset", &generated_dt.offset().local_minus_utc());
-    let header: Option<String> = match &settings.templates.header {
-        Some(header) => Some(tera.render(header, &global_ctx).expect("Unable to templatize header file")),
-        _ => None,
-    };
-    let footer: Option<String> = match &settings.templates.footer {
-        Some(footer) => Some(tera.render(footer, &global_ctx).expect("Unable to templatize footer file")),
-        _ => None,
-    };
 
     match tera.render(&settings.templates.repo_list.as_deref().unwrap_or("repos.html"), &global_ctx) {
         Ok(rendered) => {
             let mut output_path = settings.output_dir.clone();
             output_path.push("repos.html");
             let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-            write_rendered(&mut file, &rendered, header.as_deref(), footer.as_deref());
+            write_rendered(&mut file, &rendered);
         },
         Err(x) => match x.kind {
             tera::ErrorKind::TemplateNotFound(_) if settings.templates.repo_list.is_none() => {},
@@ -905,7 +974,7 @@ fn main() {
             let mut output_path = settings.output_dir.clone();
             output_path.push("404.html");
             let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-            write_rendered(&mut file, &rendered, header.as_deref(), footer.as_deref());
+            write_rendered(&mut file, &rendered);
         },
         Err(x) => match x.kind {
             tera::ErrorKind::TemplateNotFound(_) if settings.templates.error.is_none() => {},

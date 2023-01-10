@@ -1,3 +1,20 @@
+{% extends "base.html" %}
+
+{% block html_head_extra %}
+<link rel="stylesheet" type="text/css" href="syntax.css" />
+{% endblock html_head_extra %}
+
+
+{% block content %}
 {{file.path}} ({{file.name}}) [{{file.id}}]<br/>
--------
+-------<br/>
+{% if file.contents_safe -%}
+{% if file.contents_preformatted -%}
+<pre>{{file.contents | safe }}</pre>
+{%- else -%}
+{{file.contents | safe }}
+{%- endif -%}
+{%- else -%}
 <pre style="margin: 0">{{file.contents}}</pre>
+{%- endif -%}
+{% endblock content %}
