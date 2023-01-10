@@ -1,31 +1,27 @@
-<html>
-  <body style="font-family: monospace;">
-    <strong>
-    commit: {{commit.full_hash}}<br/>
-    author: {{commit.author.name}}<br/>
-    committer: {{commit.committer.name}}<br/>
-    parent: {% if commit.parents | length > 0 -%}<a href="{{commit.parents | first}}.html">{{commit.parents | first}}</a>{%-endif-%}<br/>
-    </strong>
-    <br/>
-    <pre style="margin: 0;">{{commit.message}}</pre>
-    {% for file in commit.diff.files -%}
-    <br/>
-    <strong>
-    diff --git a/{{file.basefile}} b/{{file.basefile}}<br/>
-    line changes: +{{file.additions}}/-{{file.deletions}}<br/>
-    index {{file.oldid | truncate(length=7,end="")}}..{{file.newid | truncate(length=7,end="")}}<br/>
-    --- {{file.oldfile}}<br/>
-    +++ {{file.newfile}}
-    </strong>
-    {% for hunk in file.hunks -%}
-    <pre><strong>{{hunk.context}}</strong>
-    {%- for line in hunk.lines -%}
-    {%- if line.kind in ["del","add"] -%}<span style="color: {%- if line.kind == "del" -%}bb0000{%- else -%}00aa00{% endif %}">{%- endif -%}
+<strong>
+  commit: {{commit.full_hash}}<br/>
+  author: {{commit.author.name}}<br/>
+  committer: {{commit.committer.name}}<br/>
+  parent: {% if commit.parents | length > 0 -%}<a href="{{commit.parents | first}}.html">{{commit.parents | first}}</a>{%-endif-%}<br/>
+</strong>
+<br/>
+<pre style="margin: 0;">{{commit.message}}</pre>
+{% for file in commit.diff.files -%}
+<br/>
+<strong>
+  diff --git a/{{file.basefile}} b/{{file.basefile}}<br/>
+  line changes: +{{file.additions}}/-{{file.deletions}}<br/>
+  index {{file.oldid | truncate(length=7,end="")}}..{{file.newid | truncate(length=7,end="")}}<br/>
+  --- {{file.oldfile}}<br/>
+  +++ {{file.newfile}}
+</strong>
+{% for hunk in file.hunks -%}
+<pre><strong>{{hunk.context}}</strong>
+  {%- for line in hunk.lines -%}
+  {%- if line.kind in ["del","add"] -%}<span style="color: {%- if line.kind == "del" -%}bb0000{%- else -%}00aa00{% endif %}">{%- endif -%}
     {{line.prefix}}{{line.text}}
     {%- if line.kind in ["del","add"] -%}</span>{%- endif -%}
-    {%- endfor -%}
-    </pre>
-    {% endfor -%}
-    {% endfor -%}
-</body>
-</html>
+  {%- endfor -%}
+</pre>
+{% endfor -%}
+{% endfor -%}

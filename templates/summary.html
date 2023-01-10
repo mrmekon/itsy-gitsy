@@ -1,83 +1,79 @@
-<html>
-  <body style="font-family: monospace;">
-    <table class="commits">
-      <tr>
-        <th>Commit ID</th>
-        <th>Message</th>
-        <th>Author</th>
-        <th>Date</th>
-        <th>Diff</th>
-        <th>Refs</th>
-      </tr>
-    {% for entry in history -%}
-    {% if loop.index0 < 250  -%}
-      <tr class="commit">
-        <td class="oid"><a href="commit/{{entry.full_hash}}.html">{{entry.short_hash}}</a></td>
-        <td class="commit-msg" style="font-family: sans-serif;">{{entry.summary}}</td>
-        <td class="author" style="font-family: sans-serif;">{{entry.author.name}}</td>
-        <td class="date">{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}</td>
-        <td class="diff">{{entry.stats.files}} (+{{entry.stats.additions}}/-{{entry.stats.deletions}})</td>
-        <td class="refs">{%- for ref in entry.alt_refs -%}{%- if loop.index0 > 0 -%},&nbsp; {%- endif -%}<span class="commit-ref">{{ref}}</span>{%- endfor -%}</td>
-      </tr>
-    {% endif -%}
-    {% endfor -%}
-    </table>
+<table class="commits">
+  <tr>
+    <th>Commit ID</th>
+    <th>Message</th>
+    <th>Author</th>
+    <th>Date</th>
+    <th>Diff</th>
+    <th>Refs</th>
+  </tr>
+  {% for entry in history -%}
+  {% if loop.index0 < 250  -%}
+                      <tr class="commit">
+                        <td class="oid"><a href="commit/{{entry.full_hash}}.html">{{entry.short_hash}}</a></td>
+                        <td class="commit-msg" style="font-family: sans-serif;">{{entry.summary}}</td>
+                        <td class="author" style="font-family: sans-serif;">{{entry.author.name}}</td>
+                        <td class="date">{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}</td>
+                        <td class="diff">{{entry.stats.files}} (+{{entry.stats.additions}}/-{{entry.stats.deletions}})</td>
+                        <td class="refs">{%- for ref in entry.alt_refs -%}{%- if loop.index0 > 0 -%},&nbsp; {%- endif -%}<span class="commit-ref">{{ref}}</span>{%- endfor -%}</td>
+</tr>
+{% endif -%}
+{% endfor -%}
+</table>
 
-    <table class="branches">
-      <tr>
-        <th>Branch</th>
-        <th>Commit ID</th>
-        <th>Message</th>
-        <th>Author</th>
-        <th>Date</th>
-      </tr>
-    {% for entry in branches -%}
-      <tr class="branch">
-        <td class="name"><a href="branch/{{entry.full_hash}}.html">{{entry.ref_name}}</a></td>
-        <td class="oid">{{entry.short_hash}}</td>
-        <td class="commit-msg" style="font-family: sans-serif;">{{entry.summary}}</td>
-        <td class="author">{{entry.author.name}}</td>
-        <td class="date">{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}</td>
-      </tr>
-    {% endfor -%}
-    </table>
+<table class="branches">
+  <tr>
+    <th>Branch</th>
+    <th>Commit ID</th>
+    <th>Message</th>
+    <th>Author</th>
+    <th>Date</th>
+  </tr>
+  {% for entry in branches -%}
+  <tr class="branch">
+    <td class="name"><a href="branch/{{entry.full_hash}}.html">{{entry.ref_name}}</a></td>
+    <td class="oid">{{entry.short_hash}}</td>
+    <td class="commit-msg" style="font-family: sans-serif;">{{entry.summary}}</td>
+    <td class="author">{{entry.author.name}}</td>
+    <td class="date">{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}</td>
+  </tr>
+  {% endfor -%}
+</table>
 
-    <table class="tags">
-      <tr>
-        <th>Tag</th>
-        <th>Commit ID</th>
-        <th>Message</th>
-        <th>Author</th>
-        <th>Date</th>
-      </tr>
-    {% for entry in tags -%}
-      <tr class="tag">
-        <td class="name"><a href="tag/{{entry.full_hash}}.html">{{entry.ref_name}}</a></td>
-        <td class="oid">{{entry.short_hash}}</td>
-        <td class="commit-msg" style="font-family: sans-serif;">{{entry.summary}}</td>
-        <td class="author">{{entry.author.name}}</td>
-        <td class="date">{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}</td>
-      </tr>
-    {% endfor -%}
-    </table>
+<table class="tags">
+  <tr>
+    <th>Tag</th>
+    <th>Commit ID</th>
+    <th>Message</th>
+    <th>Author</th>
+    <th>Date</th>
+  </tr>
+  {% for entry in tags -%}
+  <tr class="tag">
+    <td class="name"><a href="tag/{{entry.full_hash}}.html">{{entry.ref_name}}</a></td>
+    <td class="oid">{{entry.short_hash}}</td>
+    <td class="commit-msg" style="font-family: sans-serif;">{{entry.summary}}</td>
+    <td class="author">{{entry.author.name}}</td>
+    <td class="date">{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}</td>
+  </tr>
+  {% endfor -%}
+</table>
 
-    <table class="files">
-      <tr>
-        <th>File</th>
-        <th>ID</th>
-        <th>Type</th>
-        <th>Mode</th>
-        <th>Size</th>
-      </tr>
-    {% for file in root_files -%}
-      <tr class="file">
-        <td class="name"><a href="{{file.kind}}/{{file.id}}.html">{{file.name}}</a></td>
-        <td class="id">{{file.id}}</td>
-        <td class="type">{{file.kind}} ({{file.is_binary}})</td>
-        <td class="mode">{{file.mode}}</td>
-        <td class="size">{{file.size}}</td>
-      </tr>
-    {% endfor -%}
-    </table>
-</body>
-</html>
+<table class="files">
+  <tr>
+    <th>File</th>
+    <th>ID</th>
+    <th>Type</th>
+    <th>Mode</th>
+    <th>Size</th>
+  </tr>
+  {% for file in root_files -%}
+  <tr class="file">
+    <td class="name"><a href="{{file.kind}}/{{file.id}}.html">{{file.name}}</a></td>
+    <td class="id">{{file.id}}</td>
+    <td class="type">{{file.kind}} ({{file.is_binary}})</td>
+    <td class="mode">{{file.mode}}</td>
+    <td class="size">{{file.size}}</td>
+  </tr>
+  {% endfor -%}
+</table>

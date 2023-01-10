@@ -1,7 +1,3 @@
-<html>
-  <body style="font-family: monospace;">
-    {% for repo in repos -%}
-    <a href="{{repo.name}}/summary.html">{{ repo.name }}</a> ({{ts_to_date(ts=repo.history[0].ts_utc, tz=repo.history[0].ts_offset)}})<br/>
-    {% endfor -%}
-  </body>
-</html>
+{% for repo in repos | sort(attribute="name") -%}
+<a href="{{repo.name}}/summary.html">{{ repo.name }}</a> ({{repo.metadata.website}}) [{{repo.metadata.attributes | get(key="some_extra_thing", default="")}}] ({{ts_to_date(ts=repo.history[0].ts_utc, tz=repo.history[0].ts_offset)}})<br/>
+{% endfor -%}

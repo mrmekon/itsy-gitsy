@@ -6,7 +6,8 @@ use chrono::{
 use clap::Parser;
 use git2::{DiffOptions, Repository, Error};
 use serde::{Serialize, Deserialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use tera::{Context, Filter, Function, Tera, Value, to_value, try_get_value};
@@ -36,7 +37,7 @@ fn first_line(msg: &[u8]) -> String {
 #[derive(Serialize)]
 struct GitRepo {
     name: String,
-    metadata: ItsyMetadata,
+    metadata: GitsyMetadata,
     history: Vec<GitObject>,
     branches: Vec<GitObject>,
     tags: Vec<GitObject>,
@@ -46,12 +47,12 @@ struct GitRepo {
 }
 
 #[derive(Serialize, Default)]
-struct ItsyMetadata {
+struct GitsyMetadata {
     full_name: Option<String>,
     description: Option<String>,
     website: Option<String>,
     clone: Option<String>,
-    attributes: BTreeMap<String, String>,
+    attributes: BTreeMap<String, toml::Value>,
 }
 
 #[derive(Serialize, Default)]
@@ -172,7 +173,7 @@ fn walk_file_tree(repo: &git2::Repository, rev: &str, files: &mut Vec<GitFile>,
     Ok(())
 }
 
-fn parse_repo(repo: &Repository, name: &str) -> Result<GitRepo, Error> {
+fn parse_repo(repo: &Repository, name: &str, metadata: GitsyMetadata) -> Result<GitRepo, Error> {
     let mut history: Vec<GitObject> = vec!();
     let mut branches: Vec<GitObject> = vec!();
     let mut tags: Vec<GitObject> = vec!();
@@ -313,14 +314,14 @@ fn parse_repo(repo: &Repository, name: &str) -> Result<GitRepo, Error> {
 
     let mut root_files: Vec<GitFile> = vec!();
     let mut all_files: Vec<GitFile> = vec!();
-    walk_file_tree(&repo, "origin/HEAD", &mut root_files, 0, false, "")?;
+    walk_file_tree(&repo, "HEAD", &mut root_files, 0, false, "")?;
     // TODO: maybe this should be optional?  Walking the whole tree
     // could be slow on huge repos.
-    walk_file_tree(&repo, "origin/HEAD", &mut all_files, 0, true, "")?;
+    walk_file_tree(&repo, "HEAD", &mut all_files, 0, true, "")?;
 
     Ok(GitRepo {
         name: name.to_string(),
-        metadata: Default::default(),
+        metadata,
         history,
         branches,
         tags,
@@ -561,19 +562,63 @@ struct CliArgs {
 
 #[derive(Deserialize)]
 #[allow(dead_code)]
-struct ItsySettings {
-    template_dir: PathBuf,
+struct GitsySettings {
     output_dir: PathBuf,
     recursive_repo_dirs: Option<Vec<PathBuf>>,
-    extra: HashMap<String, toml::Value>,
+    site_name: Option<String>,
+    site_url: Option<String>,
+    site_description: Option<String>,
+    #[serde(rename(deserialize = "gitsy_templates"))]
+    templates: GitsySettingsTemplates,
+    #[serde(rename(deserialize = "gitsy_extra"))]
+    extra: Option<BTreeMap<String, toml::Value>>,
 }
+
 #[derive(Deserialize)]
-#[allow(dead_code)]
-struct ItsySettingsRepo {
+struct GitsySettingsTemplates {
+    path: PathBuf,
+    header: Option<String>,
+    footer: Option<String>,
+    repo_list: Option<String>,
+    repo_summary: Option<String>,
+    commit: Option<String>,
+    branch: Option<String>,
+    tag: Option<String>,
+    file: Option<String>,
+    dir: Option<String>,
+    error: Option<String>,
+}
+
+#[derive(Deserialize, Default)]
+struct GitsySettingsRepo {
     path: PathBuf,
     name: Option<String>,
     description: Option<String>,
     website: Option<String>,
+    attributes: BTreeMap<String, toml::Value>,
+}
+
+use std::hash::{Hash, Hasher};
+impl Hash for GitsySettingsRepo {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.path.hash(state);
+    }
+}
+impl PartialEq for GitsySettingsRepo {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path
+    }
+}
+impl Eq for GitsySettingsRepo {}
+
+fn write_rendered(file: &mut File, rendered: &str, header: Option<&str>, footer: Option<&str>) {
+    if let Some(header) = header {
+        file.write(header.as_bytes()).expect("failed to save rendered html");
+    }
+    file.write(rendered.as_bytes()).expect("failed to save rendered html");
+    if let Some(footer) = footer {
+        file.write(footer.as_bytes()).expect("failed to save rendered html");
+    }
 }
 
 fn main() {
@@ -582,11 +627,11 @@ fn main() {
 
     // Parse the known settings directly into their struct
     let toml = std::fs::read_to_string(config_path).expect(&format!("Configuration file not found: {}", config_path.display()));
-    let settings: ItsySettings = toml::from_str(&toml).expect("Configuration file is invalid.");
+    let settings: GitsySettings = toml::from_str(&toml).expect("Configuration file is invalid.");
 
     // Get a list of all remaining TOML "tables" in the file.
     // These are the user-supplied individual repositories.
-    let reserved_keys = vec!("repos","extra");
+    let reserved_keys = vec!("gitsy_templates","gitsy_extra");
     let settings_raw: HashMap<String, toml::Value> = toml::from_str(&toml).expect("blah");
     let table_keys: Vec<String> = settings_raw.iter().filter_map(|x| match x.1.is_table() {
         true => match reserved_keys.contains(&x.0.as_str()) {
@@ -599,25 +644,38 @@ fn main() {
     // Try to convert each unknown "table" into a repo struct, and
     // save the ones that are successful.  If no repo name is
     // specified, use the TOML table name.
-    let mut repos: Vec<ItsySettingsRepo> = vec!();
+    let mut repo_descriptions: std::collections::HashSet<GitsySettingsRepo> = HashSet::new();
     for k in &table_keys {
         let v = settings_raw.get(k).unwrap();
-        match toml::from_str::<ItsySettingsRepo>(&v.to_string()) {
+        match toml::from_str::<GitsySettingsRepo>(&v.to_string()) {
             Ok(mut repo) => {
                 if repo.name.is_none() {
                     repo.name = Some(k.clone());
                 }
-                repos.push(repo);
+                repo_descriptions.insert(repo);
             },
-            _ => {},
+            Err(e) => {
+                println!("Failed to parse repo [{}]: {:?}", k, e);
+            },
         }
     }
 
-    for repo in &repos {
-        println!("Parse repo: {}", repo.name.as_ref().unwrap());
+    match settings.recursive_repo_dirs {
+        Some(dirs) => {
+            for parent in &dirs {
+                for dir in std::fs::read_dir(parent).expect("Repo directory not found.") {
+                    let dir = dir.expect("Repo contains invalid entries");
+                    repo_descriptions.insert(GitsySettingsRepo {
+                        path: dir.path().clone(),
+                        ..Default::default()
+                    });
+                }
+            }
+        },
+        _ => {},
     }
 
-    let mut template_path = settings.template_dir.clone();
+    let mut template_path = settings.templates.path.clone();
     template_path.push("**");
     template_path.push("*.html");
     let mut tera = match Tera::new(template_path.to_str().expect("No template path set!")) {
@@ -635,34 +693,69 @@ fn main() {
     // Create output directory
     let _ = std::fs::create_dir(settings.output_dir.to_str().expect("Output path not set!"));
 
+    let generated_dt = chrono::offset::Local::now();
+
     let mut repos: Vec<GitRepo> = vec!();
-    for dir in std::fs::read_dir(std::path::Path::new("repos")).expect("Repo directory not found.") {
-        let dir = dir.expect("Repo contains invalid entries");
+    for repo_desc in &repo_descriptions {
+        let dir = &repo_desc.path;
         match dir.metadata() {
             Ok(m) if m.is_dir() => {},
             _ => continue,
         }
-        let path: String = dir.path().to_string_lossy().to_string();
-        let name: String = dir.file_name().to_string_lossy().to_string();
+        let path: String = dir.to_string_lossy().to_string();
+        let name: String = dir.file_name().expect("Encountered directory with no name!").to_string_lossy().to_string();
         let repo = Repository::open(path).expect("Unable to find git repository.");
-        let summary = parse_repo(&repo, &name).expect("Failed to analyze repo HEAD.");
+        let metadata = GitsyMetadata {
+            full_name: repo_desc.name.clone(),
+            description: repo_desc.description.clone(),
+            website: repo_desc.website.clone(),
+            clone: None,
+            attributes: repo_desc.attributes.clone(),
+        };
+        let summary = parse_repo(&repo, &name, metadata).expect("Failed to analyze repo HEAD.");
 
         let mut local_ctx = Context::from_serialize(&summary).unwrap();
-        match tera.render("summary.html", &local_ctx) {
+        if let Some(extra) = &settings.extra {
+            local_ctx.try_insert("extra", extra).expect("Failed to add extra settings to template engine.");
+        }
+        if let Some(site_name) = &settings.site_name {
+            local_ctx.insert("site_name", site_name);
+        }
+        if let Some(site_url) = &settings.site_url {
+            local_ctx.insert("site_url", site_url);
+        }
+        if let Some(site_description) = &settings.site_description {
+            local_ctx.insert("site_description", site_description);
+        }
+        local_ctx.insert("site_generated_ts", &generated_dt.timestamp());
+        local_ctx.insert("site_generated_offset", &generated_dt.offset().local_minus_utc());
+        let header: Option<String> = match &settings.templates.header {
+            Some(header) => Some(tera.render(header, &local_ctx).expect("Unable to templatize header file")),
+            _ => None,
+        };
+        let footer: Option<String> = match &settings.templates.footer {
+            Some(footer) => Some(tera.render(footer, &local_ctx).expect("Unable to templatize footer file")),
+            _ => None,
+        };
+
+        match tera.render(&settings.templates.repo_summary.as_deref().unwrap_or("summary.html"), &local_ctx) {
             Ok(rendered) => {
                 let mut output_path = settings.output_dir.clone();
                 output_path.push(&name);
                 let _ = std::fs::create_dir(output_path.to_str().expect("Output path not set!"));
                 output_path.push("summary.html");
                 let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-                file.write(rendered.as_bytes()).expect("failed to save rendered html");
+                write_rendered(&mut file, &rendered, header.as_deref(), footer.as_deref());
             },
-            Err(x) => println!("ERROR: {:?}", x),
+            Err(x) => match x.kind {
+                tera::ErrorKind::TemplateNotFound(_) if settings.templates.repo_summary.is_none() => {},
+                _ => println!("ERROR: {:?}", x),
+            },
         }
 
         for branch in &summary.branches {
             local_ctx.insert("branch", branch);
-            match tera.render("branch.html", &local_ctx) {
+            match tera.render(&settings.templates.branch.as_deref().unwrap_or("branch.html"), &local_ctx) {
                 Ok(rendered) => {
                     let mut output_path = settings.output_dir.clone();
                     output_path.push(&summary.name);
@@ -670,10 +763,10 @@ fn main() {
                     let _ = std::fs::create_dir(output_path.to_str().expect("Output path not set!"));
                     output_path.push(format!("{}.html", branch.full_hash));
                     let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-                    file.write(rendered.as_bytes()).expect("failed to save rendered html");
+                    write_rendered(&mut file, &rendered, header.as_deref(), footer.as_deref());
                 },
                 Err(x) => match x.kind {
-                    tera::ErrorKind::TemplateNotFound(_) => {},
+                    tera::ErrorKind::TemplateNotFound(_) if settings.templates.branch.is_none() => {},
                     _ => println!("ERROR: {:?}", x),
                 },
             }
@@ -685,7 +778,7 @@ fn main() {
             if let Some(commit) = summary.commits.get(tag.tagged_id.as_ref().unwrap()) {
                 local_ctx.insert("commit", &commit);
             }
-            match tera.render("tag.html", &local_ctx) {
+            match tera.render(&settings.templates.tag.as_deref().unwrap_or("tag.html"), &local_ctx) {
                 Ok(rendered) => {
                     let mut output_path = settings.output_dir.clone();
                     output_path.push(&summary.name);
@@ -693,10 +786,10 @@ fn main() {
                     let _ = std::fs::create_dir(output_path.to_str().expect("Output path not set!"));
                     output_path.push(format!("{}.html", tag.full_hash));
                     let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-                    file.write(rendered.as_bytes()).expect("failed to save rendered html");
+                    write_rendered(&mut file, &rendered, header.as_deref(), footer.as_deref());
                 },
                 Err(x) => match x.kind {
-                    tera::ErrorKind::TemplateNotFound(_) => {},
+                    tera::ErrorKind::TemplateNotFound(_) if settings.templates.tag.is_none() => {},
                     _ => println!("ERROR: {:?}", x),
                 },
             }
@@ -706,7 +799,7 @@ fn main() {
 
         for (_id, commit) in &summary.commits {
             local_ctx.try_insert("commit", &commit).expect("Failed to add commit to template engine.");
-            match tera.render("commit.html", &local_ctx) {
+            match tera.render(&settings.templates.commit.as_deref().unwrap_or("commit.html"), &local_ctx) {
                 Ok(rendered) => {
                     let mut output_path = settings.output_dir.clone();
                     output_path.push(&summary.name);
@@ -714,9 +807,12 @@ fn main() {
                     let _ = std::fs::create_dir(output_path.to_str().expect("Output path not set!"));
                     output_path.push(format!("{}.html", commit.full_hash));
                     let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-                    file.write(rendered.as_bytes()).expect("failed to save rendered html");
+                    write_rendered(&mut file, &rendered, header.as_deref(), footer.as_deref());
                 },
-                Err(x) => println!("ERROR: {:?}", x),
+                Err(x) => match x.kind {
+                    tera::ErrorKind::TemplateNotFound(_) if settings.templates.commit.is_none() => {},
+                    _ => println!("ERROR: {:?}", x),
+                },
             }
             local_ctx.remove("commit");
         }
@@ -724,7 +820,7 @@ fn main() {
         for file in summary.all_files.iter().filter(|x| x.kind == "file") {
             let file = fill_file_contents(&repo, &file).expect("Failed to parse file.");
             local_ctx.try_insert("file", &file).expect("Failed to add file to template engine.");
-            match tera.render("file.html", &local_ctx) {
+            match tera.render(&settings.templates.file.as_deref().unwrap_or("file.html"), &local_ctx) {
                 Ok(rendered) => {
                     let mut output_path = settings.output_dir.clone();
                     output_path.push(&summary.name);
@@ -732,9 +828,12 @@ fn main() {
                     let _ = std::fs::create_dir(output_path.to_str().expect("Output path not set!"));
                     output_path.push(format!("{}.html", file.id));
                     let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-                    file.write(rendered.as_bytes()).expect("failed to save rendered html");
+                    write_rendered(&mut file, &rendered, header.as_deref(), footer.as_deref());
                 },
-                Err(x) => println!("ERROR: {:?}", x),
+                Err(x) => match x.kind {
+                    tera::ErrorKind::TemplateNotFound(_) if settings.templates.file.is_none() => {},
+                    _ => println!("ERROR: {:?}", x),
+                },
             }
             local_ctx.remove("file");
         }
@@ -742,7 +841,7 @@ fn main() {
         for dir in summary.all_files.iter().filter(|x| x.kind == "dir") {
             let listing = dir_listing(&repo, &dir).expect("Failed to parse file.");
             local_ctx.try_insert("files", &listing).expect("Failed to add dir to template engine.");
-            match tera.render("dir.html", &local_ctx) {
+            match tera.render(&settings.templates.dir.as_deref().unwrap_or("dir.html"), &local_ctx) {
                 Ok(rendered) => {
                     let mut output_path = settings.output_dir.clone();
                     output_path.push(&summary.name);
@@ -750,9 +849,12 @@ fn main() {
                     let _ = std::fs::create_dir(output_path.to_str().expect("Output path not set!"));
                     output_path.push(format!("{}.html", dir.id));
                     let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-                    file.write(rendered.as_bytes()).expect("failed to save rendered html");
+                    write_rendered(&mut file, &rendered, header.as_deref(), footer.as_deref());
                 },
-                Err(x) => println!("ERROR: {:?}", x),
+                Err(x) => match x.kind {
+                    tera::ErrorKind::TemplateNotFound(_) if settings.templates.dir.is_none() => {},
+                    _ => println!("ERROR: {:?}", x),
+                },
             }
             local_ctx.remove("files");
         }
@@ -762,13 +864,52 @@ fn main() {
 
     let mut global_ctx = Context::new();
     global_ctx.try_insert("repos", &repos).expect("Failed to add repo to template engine.");
-    match tera.render("repos.html", &global_ctx) {
+    if let Some(extra) = &settings.extra {
+        global_ctx.try_insert("extra", extra).expect("Failed to add extra settings to template engine.");
+    }
+    if let Some(site_name) = &settings.site_name {
+        global_ctx.insert("site_name", site_name);
+    }
+    if let Some(site_url) = &settings.site_url {
+        global_ctx.insert("site_url", site_url);
+    }
+    if let Some(site_description) = &settings.site_description {
+        global_ctx.insert("site_description", site_description);
+    }
+    global_ctx.insert("site_generated_ts", &generated_dt.timestamp());
+    global_ctx.insert("site_generated_offset", &generated_dt.offset().local_minus_utc());
+    let header: Option<String> = match &settings.templates.header {
+        Some(header) => Some(tera.render(header, &global_ctx).expect("Unable to templatize header file")),
+        _ => None,
+    };
+    let footer: Option<String> = match &settings.templates.footer {
+        Some(footer) => Some(tera.render(footer, &global_ctx).expect("Unable to templatize footer file")),
+        _ => None,
+    };
+
+    match tera.render(&settings.templates.repo_list.as_deref().unwrap_or("repos.html"), &global_ctx) {
         Ok(rendered) => {
             let mut output_path = settings.output_dir.clone();
             output_path.push("repos.html");
             let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-            file.write(rendered.as_bytes()).expect("failed to save rendered html");
+            write_rendered(&mut file, &rendered, header.as_deref(), footer.as_deref());
         },
-        Err(x) => println!("ERROR: {:?}", x),
+        Err(x) => match x.kind {
+            tera::ErrorKind::TemplateNotFound(_) if settings.templates.repo_list.is_none() => {},
+            _ => println!("ERROR: {:?}", x),
+        },
+    }
+
+    match tera.render(&settings.templates.error.as_deref().unwrap_or("404.html"), &global_ctx) {
+        Ok(rendered) => {
+            let mut output_path = settings.output_dir.clone();
+            output_path.push("404.html");
+            let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
+            write_rendered(&mut file, &rendered, header.as_deref(), footer.as_deref());
+        },
+        Err(x) => match x.kind {
+            tera::ErrorKind::TemplateNotFound(_) if settings.templates.error.is_none() => {},
+            _ => println!("ERROR: {:?}", x),
+        },
     }
 }

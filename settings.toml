@@ -1,12 +1,30 @@
-template_dir = "templates/"
+site_name = "Trevor's Repos"
+site_url = "https://git.trevorbentley.com"
+site_description = "A bunch of git repos in a stupid format."
+
 output_dir = "gen/"
 
-[a_repo]
-path = "repos/connectr"
-name = "connectr"
+recursive_repo_dirs = ["repos/"]
 
-[another_repo]
-path = "repos/fruitbasket"
+[gitsy_templates]
+path = "templates/"
+repo_list = "repos.html"
+repo_summary = "summary.html"
+commit = "commit.html"
+branch = "branch.html"
+tag = "tag.html"
+file = "file.html"
+dir = "dir.html"
+header = "header.html"
+footer = "footer.html"
+error = "404.html"
 
-[extra]
-thingo = 1
+[gitsy_extra]
+global_user_defined_vars = "whatever"
+these_can_also_be_numbers = 5
+or_bools = true
+
+[circadian]
+path = "more_repos/circadian"
+website = "https://circadian.trevorbentley.com"
+attributes = {some_extra_thing = "user defined", visible = false, number_of_bananas = 3}

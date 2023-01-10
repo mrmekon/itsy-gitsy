@@ -13,7 +13,7 @@ license = "GPL-3.0-or-later"
 
 
 [dependencies]
-chrono = "0.4.23"
+chrono = { version = "0.4.23", features=["clock"] }
 clap = { version="4.0.32", features=["derive"] }
 git2 = "0.15.0"
 serde = { version = "1.0.152", features = ["derive"] }

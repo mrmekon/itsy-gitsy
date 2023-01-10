@@ -1,21 +1,17 @@
-<html>
-  <body style="font-family: monospace;">
-    <table class="files">
-      <tr>
-        <th>File</th>
-        <th>ID</th>
-        <th>Type</th>
-        <th>Mode</th>
-        <th>Size</th>
-      </tr>
-    {% for file in files -%}
-      <tr class="file">
-        <td class="file-name"><a href="../{{file.kind}}/{{file.id}}.html">{{file.name}}</a></td>
-        <td class="file-id">{{file.id}}</td>
-        <td class="file-type">{{file.kind}} ({{file.is_binary}})</td>
-        <td class="file-mode">{{file.mode}}</td>
-        <td class="file-size">{{file.size}}</td>
-      </tr>
-    {% endfor -%}
-  </body>
-</html>
+<table class="files">
+  <tr>
+    <th>File</th>
+    <th>ID</th>
+    <th>Type</th>
+    <th>Mode</th>
+    <th>Size</th>
+  </tr>
+  {% for file in files -%}
+  <tr class="file">
+    <td class="file-name"><a href="../{{file.kind}}/{{file.id}}.html">{{file.name}}</a></td>
+    <td class="file-id">{{file.id}}</td>
+    <td class="file-type">{{file.kind}} ({{file.is_binary}})</td>
+    <td class="file-mode">{{file.mode}}</td>
+    <td class="file-size">{{file.size}}</td>
+  </tr>
+  {% endfor -%}
