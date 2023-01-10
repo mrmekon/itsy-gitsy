@@ -1,0 +1,7 @@
+<html>
+  <body style="font-family: monospace;">
+    {% for repo in repos -%}
+    <a href="{{repo.name}}/summary.html">{{ repo.name }}</a> ({{ts_to_date(ts=repo.history[0].ts_utc, tz=repo.history[0].ts_offset)}})<br/>
+    {% endfor -%}
+  </body>
+</html>

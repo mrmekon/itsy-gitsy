@@ -1,0 +1,12 @@
+template_dir = "templates/"
+output_dir = "gen/"
+
+[a_repo]
+path = "repos/connectr"
+name = "connectr"
+
+[another_repo]
+path = "repos/fruitbasket"
+
+[extra]
+thingo = 1

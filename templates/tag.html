@@ -1,0 +1,15 @@
+<html>
+  <body style="font-family: monospace;">
+    branch: {{tag.ref_name}}<br/>
+    hash: {{tag.full_hash}} ({{tag.short_hash}})<br/>
+    author: {{tag.author.name}}<br/>
+    committer: {{tag.committer.name}}<br/>
+    date: {{ts_to_date(ts=tag.ts_utc, tz=tag.ts_offset)}}<br/>
+    summary: {{tag.summary}}<br/>
+    <pre>{{tag.message}}</pre>
+    <br/>
+    commit: {%- if commit -%}<a href="../commit/{{commit.full_hash}}.html">{{commit.full_hash}}</a>
+    <pre>{{commit.message}}</pre>
+    {%-else-%}{{tag.tagged_id}}{%-endif-%}<br/>
+  </body>
+</html>
