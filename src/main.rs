@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tera::{Context, Filter, Function, Tera, Value, to_value, try_get_value};
 
 #[cfg(feature = "markdown")]
@@ -23,9 +24,46 @@ use syntect::{
     util::LinesWithEndings,
 };
 
+static VERBOSITY: AtomicUsize = AtomicUsize::new(0);
+
+#[allow(unused_macros)]
+macro_rules! always {
+    () => { println!() };
+    ($($arg:tt)*) => {{ println!($($arg)*); }};
+}
+#[allow(unused_macros)]
+macro_rules! error {
+    () => { eprintln!() };
+    ($($arg:tt)*) => {{ eprintln!($($arg)*); }};
+}
+#[allow(unused_macros)]
+macro_rules! normal {
+    () => { if VERBOSITY.load(Ordering::Relaxed) > 0 { println!() } };
+    ($($arg:tt)*) => {{ if VERBOSITY.load(Ordering::Relaxed) > 0 { println!($($arg)*); } }};
+}
+#[allow(unused_macros)]
+macro_rules! normal_noln {
+    () => { if VERBOSITY.load(Ordering::Relaxed) > 0 { print!(); let _ = std::io::stdout().flush(); } };
+    ($($arg:tt)*) => { if VERBOSITY.load(Ordering::Relaxed) > 0 { {print!($($arg)*);}; let _ = std::io::stdout().flush(); }};
+}
+#[allow(unused_macros)]
+macro_rules! loud {
+    () => { if VERBOSITY.load(Ordering::Relaxed) > 1 { println!() } };
+    ($($arg:tt)*) => {{ if VERBOSITY.load(Ordering::Relaxed) > 1 { println!($($arg)*); } }};
+}
+#[allow(unused_macros)]
+macro_rules! louder {
+    () => { if VERBOSITY.load(Ordering::Relaxed) > 2 { println!() } };
+    ($($arg:tt)*) => {{ if VERBOSITY.load(Ordering::Relaxed) > 2 { println!($($arg)*); } }};
+}
+#[allow(unused_macros)]
+macro_rules! loudest {
+    () => { if VERBOSITY.load(Ordering::Relaxed) > 3 { println!() } };
+    ($($arg:tt)*) => {{ if VERBOSITY.load(Ordering::Relaxed) > 3 { println!($($arg)*); } }};
+}
+
 // TODO:
 //
-//   * verbose output
 //   * pagination
 //   * remote repositories
 //   * extra metadata for recursive repo listings?
@@ -181,6 +219,8 @@ fn walk_file_tree(repo: &git2::Repository, rev: &str, files: &mut Vec<GitFile>,
             is_binary = blob.is_binary();
             size = blob.content().len();
         }
+
+        loudest!("   + file: {}", path);
         files.push(GitFile {
             id: entry.id().to_string(),
             name: name.clone(),
@@ -213,9 +253,11 @@ fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, metad
     let mut branch_count = 0;
     let mut tag_count = 0;
 
+    loud!();
     let mut revwalk = repo.revwalk()?;
     revwalk.set_sorting(git2::Sort::TOPOLOGICAL)?;
     revwalk.push_head()?;
+    loudest!(" - Parsing history:");
     for oid in revwalk {
         let oid = oid?;
         if commit_count >= settings.limit_commits.unwrap_or(usize::MAX) ||
@@ -264,6 +306,7 @@ fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, metad
         }
 
         if history_count < settings.limit_history.unwrap_or(usize::MAX) {
+            loudest!("   + {} {}", full_hash, first_line(commit.message_bytes()));
             // TODO: this is basically a duplicate of the commit
             // array, and really should be pointers to that array
             // instead.  But it's not a quick task to switch to
@@ -287,7 +330,10 @@ fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, metad
             history_count += 1;
         }
     }
+    loud!(" - parsed {} history entries", history_count);
+    loud!(" - parsed {} commits", commit_count);
 
+    loudest!(" - Parsing branches:");
     for branch in repo.branches(None)? {
         if branch_count >= settings.limit_branches.unwrap_or(usize::MAX) {
             break;
@@ -305,6 +351,7 @@ fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, metad
         let commit = repo.find_commit(obj.id())?;
         let full_hash = obj.id().to_string();
         let short_hash = obj.short_id()?.as_str().unwrap_or_default().to_string();
+        loudest!("   + {} {}", full_hash, name);
         branches.push(GitObject {
             full_hash,
             short_hash,
@@ -326,6 +373,9 @@ fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, metad
         });
         branch_count += 1;
     }
+    loud!(" - parsed {} branches", branch_count);
+
+    loudest!(" - Parsing tags:");
     for tag in repo.tag_names(None)?.iter() {
         if tag_count >= settings.limit_tags.unwrap_or(usize::MAX) {
             break;
@@ -348,6 +398,7 @@ fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, metad
             Some(m) => Some(first_line(m)),
             _ => None,
         };
+        loudest!("   + {} {}", full_hash, tag);
         tags.push(GitObject {
             full_hash,
             short_hash,
@@ -365,16 +416,20 @@ fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, metad
         });
         tag_count += 1;
     }
+    loud!(" - parsed {} tags", tag_count);
 
     let mut root_files: Vec<GitFile> = vec!();
     let mut all_files: Vec<GitFile> = vec!();
     let max_depth = settings.limit_tree_depth.unwrap_or(usize::MAX);
     if max_depth > 0 {
+        loudest!(" - Walking root files");
         walk_file_tree(&repo, "HEAD", &mut root_files, 0, usize::MAX, false, "")?;
         // TODO: maybe this should be optional?  Walking the whole tree
         // could be slow on huge repos.
+        loudest!(" - Walking all files");
         walk_file_tree(&repo, "HEAD", &mut all_files, 0, max_depth, true, "")?;
     }
+    loud!(" - parsed {} files", all_files.len());
 
     Ok(GitRepo {
         name: name.to_string(),
@@ -535,7 +590,7 @@ fn syntax_highlight(contents: &str, extension: &str) -> String {
         match html_generator.parse_html_for_line_which_includes_newline(line) {
             Ok(_) => {},
             Err(_) => {
-                println!("Warning: failed to apply syntax highlighting.");
+                error!("Warning: failed to apply syntax highlighting.");
                 return contents.to_string();
             },
         }
@@ -554,11 +609,13 @@ fn fill_file_contents(repo: &Repository, file: &GitFile, settings: &GitsySetting
                 let (content, rendered, pre) = match path.extension() {
                     #[cfg(feature = "markdown")]
                     Some(x) if settings.render_markdown.unwrap_or(false) && x == "md" => {
+                        loudest!(" - rendering Markdown in {}", path.display());
                         let (cstr, rendered, pre) = (parse_markdown(&cstr), true, false);
                         (cstr, rendered, pre)
                     },
                     #[cfg(any(feature = "highlight", feature = "highlight_fast"))]
                     Some(x) if settings.syntax_highlight.unwrap_or(false) => {
+                        loudest!(" - syntax highlighting {}", path.display());
                         (syntax_highlight(&cstr, x.to_string_lossy().to_string().as_str()), true, true)
                     },
                     _ => (cstr, false, true),
@@ -660,13 +717,24 @@ impl Function for TsTimestampFn {
 }
 
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(author = "Trevor Bentley", version, about, long_about = None)]
+#[command(help_template = "\
+{name} v{version}, by {author-with-newline}
+{about-with-newline}
+{usage-heading} {usage}
+
+{all-args}{after-help}
+")]
 struct CliArgs {
     #[arg(short, long, value_name = "FILE")]
     config: Option<PathBuf>,
+    #[arg(short, long)]
+    quiet: bool,
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    verbose: u8,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[allow(dead_code)]
 struct GitsySettings {
     recursive_repo_dirs: Option<Vec<PathBuf>>,
@@ -693,7 +761,7 @@ struct GitsySettings {
     extra: Option<BTreeMap<String, toml::Value>>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct GitsySettingsTemplates {
     path: PathBuf,
     repo_list: Option<String>,
@@ -706,7 +774,7 @@ struct GitsySettingsTemplates {
     error: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct GitsySettingsOutputs {
     path: PathBuf,
     repo_list: Option<String>,
@@ -781,7 +849,7 @@ impl GitsySettingsOutputs {
     output_path_fn!(repo_assets  , GitObject, full_hash, true,  "%REPO%/assets/");
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, Debug)]
 struct GitsySettingsRepo {
     path: PathBuf,
     name: Option<String>,
@@ -820,12 +888,18 @@ fn write_rendered(path: &str, rendered: &str) -> usize {
         .expect(&format!("Unable to write to output path: {}", path));
     file.write(rendered.as_bytes())
         .expect(&format!("Failed to save rendered html to path: {}", path));
+    louder!(" - wrote file: {}", path);
     rendered.as_bytes().len()
 }
 
 fn main() {
+    let start_all = std::time::Instant::now();
     let cli = CliArgs::parse();
     let config_path = cli.config.as_deref().unwrap_or(Path::new("config.toml"));
+    VERBOSITY.store(match cli.quiet {
+        true => 0,
+        false => (cli.verbose + 1).into(),
+    }, Ordering::Relaxed);
 
     // Parse the known settings directly into their struct
     let toml = std::fs::read_to_string(config_path).expect(&format!("Configuration file not found: {}", config_path.display()));
@@ -857,18 +931,20 @@ fn main() {
                 repo_descriptions.insert(repo);
             },
             Err(e) => {
-                println!("Failed to parse repo [{}]: {:?}", k, e);
+                error!("Failed to parse repo [{}]: {:?}", k, e);
             },
         }
     }
 
-    match settings.recursive_repo_dirs {
+    match &settings.recursive_repo_dirs {
         Some(dirs) => {
-            for parent in &dirs {
+            for parent in dirs {
                 for dir in std::fs::read_dir(parent).expect("Repo directory not found.") {
                     let dir = dir.expect("Repo contains invalid entries");
+                    let name: String = dir.file_name().to_string_lossy().to_string();
                     repo_descriptions.insert(GitsySettingsRepo {
                         path: dir.path().clone(),
+                        name: Some(name),
                         render_markdown: settings.render_markdown.clone(),
                         syntax_highlight: settings.syntax_highlight.clone(),
                         syntax_highlight_theme: settings.syntax_highlight_theme.clone(),
@@ -894,7 +970,7 @@ fn main() {
     let mut tera = match Tera::new(template_path.to_str().expect("No template path set!")) {
         Ok(t) => t,
         Err(e) => {
-            println!("Parsing error(s): {}", e);
+            error!("Parsing error(s): {}", e);
             ::std::process::exit(1);
         }
     };
@@ -918,9 +994,25 @@ fn main() {
     let _ = std::fs::create_dir(settings.outputs.path.to_str().expect("Output path invalid."));
 
     let generated_dt = chrono::offset::Local::now();
+    let mut global_bytes = 0;
     let mut total_bytes = 0;
     let mut repos: Vec<GitRepo> = vec!();
-    for repo_desc in &repo_descriptions {
+
+    // Sort the repositories by name
+    let mut repo_vec: Vec<GitsySettingsRepo> = repo_descriptions.drain().collect();
+    repo_vec.sort_by(|x,y| x.name.as_deref().map(|n| n.cmp(&y.name.as_deref().unwrap_or_default()))
+                     .unwrap_or(std::cmp::Ordering::Equal));
+    // Find the one with the longest name, for pretty printing
+    let global_name = "repo list";
+    let longest_repo_name = repo_vec.iter().fold(0, |acc, x| {
+        std::cmp::max(acc, x.name.as_deref().map(|n| n.len()).unwrap_or(0))
+    }).max(global_name.len());
+
+    loudest!("Global settings:\n{:#?}", &settings);
+
+    // Iterate over each repository, generating outputs
+    for repo_desc in &repo_vec {
+        loudest!("Repo settings:\n{:#?}", &repo_desc);
         let mut repo_bytes = 0;
         let dir = &repo_desc.path;
         match dir.metadata() {
@@ -928,7 +1020,7 @@ fn main() {
             _ => continue,
         }
         let repo_path: String = dir.to_string_lossy().to_string();
-        let name: String = dir.file_name().expect("Encountered directory with no name!").to_string_lossy().to_string();
+        let name = repo_desc.name.as_deref().unwrap_or_default();
         let repo = Repository::open(&repo_path).expect("Unable to find git repository.");
         let metadata = GitsyMetadata {
             full_name: repo_desc.name.clone(),
@@ -937,6 +1029,8 @@ fn main() {
             clone: None,
             attributes: repo_desc.attributes.clone().unwrap_or_default(),
         };
+        normal_noln!("[{}{}]... ", name, " ".repeat(longest_repo_name - name.len()));
+        let start_parse = std::time::Instant::now();
         let summary = parse_repo(&repo, &name, &repo_desc, metadata).expect("Failed to analyze repo HEAD.");
 
         let mut local_ctx = Context::from_serialize(&summary).unwrap();
@@ -961,7 +1055,7 @@ fn main() {
             },
             Err(x) => match x.kind {
                 tera::ErrorKind::TemplateNotFound(_) if settings.templates.repo_summary.is_none() => {},
-                _ => println!("ERROR: {:?}", x),
+                _ => error!("ERROR: {:?}", x),
             },
         }
 
@@ -974,7 +1068,7 @@ fn main() {
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.branch.is_none() => {},
-                    _ => println!("ERROR: {:?}", x),
+                    _ => error!("ERROR: {:?}", x),
                 },
             }
             local_ctx.remove("branch");
@@ -992,7 +1086,7 @@ fn main() {
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.tag.is_none() => {},
-                    _ => println!("ERROR: {:?}", x),
+                    _ => error!("ERROR: {:?}", x),
                 },
             }
             local_ctx.remove("tag");
@@ -1008,7 +1102,7 @@ fn main() {
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.commit.is_none() => {},
-                    _ => println!("ERROR: {:?}", x),
+                    _ => error!("ERROR: {:?}", x),
                 },
             }
             local_ctx.remove("commit");
@@ -1042,7 +1136,7 @@ fn main() {
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.file.is_none() => {},
-                    _ => println!("ERROR: {:?}", x),
+                    _ => error!("ERROR: {:?}", x),
                 },
             }
             local_ctx.remove("file");
@@ -1061,7 +1155,7 @@ fn main() {
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.dir.is_none() => {},
-                    _ => println!("ERROR: {:?}", x),
+                    _ => error!("ERROR: {:?}", x),
                 },
             }
             local_ctx.remove("files");
@@ -1085,11 +1179,18 @@ fn main() {
         }
 
         repos.push(summary);
-        println!("Wrote repo: {} ({} bytes)", name, repo_bytes);
+        normal!("{}done in {:.2}s ({} bytes)",
+                match VERBOSITY.load(Ordering::Relaxed) > 1 {
+                    true => " - ",
+                    _ => "",
+                },
+                start_parse.elapsed().as_secs_f32(), repo_bytes);
         total_bytes += repo_bytes;
         size_check!(repo_desc, repo_bytes, total_bytes);
     }
 
+    let start_global = std::time::Instant::now();
+    normal_noln!("[{}{}]... ", global_name, " ".repeat(longest_repo_name - global_name.len()));
     let mut global_ctx = Context::new();
     global_ctx.try_insert("repos", &repos).expect("Failed to add repo to template engine.");
     if let Some(extra) = &settings.extra {
@@ -1109,21 +1210,21 @@ fn main() {
 
     match tera.render(&settings.templates.repo_list.as_deref().unwrap_or("repos.html"), &global_ctx) {
         Ok(rendered) => {
-            total_bytes += write_rendered(&settings.outputs.repo_list(None, None), &rendered);
+            global_bytes += write_rendered(&settings.outputs.repo_list(None, None), &rendered);
         },
         Err(x) => match x.kind {
             tera::ErrorKind::TemplateNotFound(_) if settings.templates.repo_list.is_none() => {},
-            _ => println!("ERROR: {:?}", x),
+            _ => error!("ERROR: {:?}", x),
         },
     }
 
     match tera.render(&settings.templates.error.as_deref().unwrap_or("404.html"), &global_ctx) {
         Ok(rendered) => {
-            total_bytes += write_rendered(&settings.outputs.error(None, None), &rendered);
+            global_bytes += write_rendered(&settings.outputs.error(None, None), &rendered);
         },
         Err(x) => match x.kind {
             tera::ErrorKind::TemplateNotFound(_) if settings.templates.error.is_none() => {},
-            _ => println!("ERROR: {:?}", x),
+            _ => error!("ERROR: {:?}", x),
         },
     }
 
@@ -1137,10 +1238,12 @@ fn main() {
             std::fs::copy(&src_file, &dst_file)
                 .expect(&format!("Failed to copy asset file: {}", src_file.display()));
             if let Ok(meta) = std::fs::metadata(dst_file) {
-                total_bytes += meta.len() as usize;
+                global_bytes += meta.len() as usize;
             }
         }
     }
 
-    println!("Total bytes written: {}", total_bytes);
+    total_bytes += global_bytes;
+    normal!("done in {:.2}s ({} bytes)", start_global.elapsed().as_secs_f32(), global_bytes);
+    loud!("Wrote {} bytes in {:.2}s", total_bytes, start_all.elapsed().as_secs_f32());
 }
