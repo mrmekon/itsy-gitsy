@@ -166,7 +166,8 @@ fn walk_file_tree(repo: &git2::Repository, rev: &str, files: &mut Vec<GitFile>,
     let obj = repo.revparse_single(rev)?;
     let tree = obj.peel_to_tree()?;
     for entry in tree.iter() {
-        let name = prefix.to_string() + entry.name().unwrap_or_default();
+        let name = entry.name().unwrap_or_default().to_string();
+        let path = prefix.to_string() + entry.name().unwrap_or_default();
         let kind = match entry.kind() {
             Some(git2::ObjectType::Tree) => "dir",
             Some(git2::ObjectType::Blob) => "file",
@@ -183,10 +184,7 @@ fn walk_file_tree(repo: &git2::Repository, rev: &str, files: &mut Vec<GitFile>,
         files.push(GitFile {
             id: entry.id().to_string(),
             name: name.clone(),
-            path: match depth {
-                0 => name.to_string(),
-                _ => format!("{}/{}", prefix, name),
-            },
+            path: path.clone(),
             kind: kind.to_string(),
             mode: entry.filemode(),
             is_binary,
@@ -197,7 +195,7 @@ fn walk_file_tree(repo: &git2::Repository, rev: &str, files: &mut Vec<GitFile>,
             contents_preformatted: true,
         });
         if recurse && depth < (max_depth - 1) && entry.kind() == Some(git2::ObjectType::Tree) {
-            let prefix = name + "/";
+            let prefix = path + "/";
             walk_file_tree(repo, &entry.id().to_string(), files,
                            depth+1, max_depth, true, &prefix)?;
         }
