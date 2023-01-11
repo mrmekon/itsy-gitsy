@@ -6,26 +6,34 @@ render_markdown = true
 syntax_highlight = true
 syntax_highlight_theme = "base16-ocean.light"
 
-output_dir = "gen/"
+asset_files = ["test.html"]
 
 recursive_repo_dirs = ["repos/"]
 
-# TODO: specify limits
-# TODO: specify output directories/filenames
-# TODO: extra metadata for recursive repo listings
-# TODO: per-site and per-repo resources (just copied to output dir)
-# TODO: enable/disable markdown/highlighting
-# TODO: highlighting theme, extensions
 [gitsy_templates]
 path = "templates/"
-repo_list = "repos.html"
+repo_list    = "repos.html"
 repo_summary = "summary.html"
-commit = "commit.html"
-branch = "branch.html"
-tag = "tag.html"
-file = "file.html"
-dir = "dir.html"
-error = "404.html"
+commit       = "commit.html"
+branch       = "branch.html"
+tag          = "tag.html"
+file         = "file.html"
+dir          = "dir.html"
+error        = "404.html"
+
+[gitsy_outputs]
+path = "gen/"
+repo_list     = "repos.html"
+repo_summary  = "%REPO%/summary.html"
+commit        = "%REPO%/commit/%ID%.html"
+branch        = "%REPO%/branch/%ID%.html"
+tag           = "%REPO%/tag/%ID%.html"
+file          = "%REPO%/file/%ID%.html"
+syntax_css    = "%REPO%/file/syntax.css"
+dir           = "%REPO%/dir/%ID%.html"
+error         = "404.html"
+global_assets = "assets/"
+repo_assets   = "%REPO%/assets/"
 
 [gitsy_extra]
 global_user_defined_vars = "whatever"
@@ -38,3 +46,4 @@ website = "https://circadian.trevorbentley.com"
 attributes = {some_extra_thing = "user defined", visible = false, number_of_bananas = 3}
 render_markdown = false
 syntax_highlighting = false
+asset_files = ["LICENSE"]

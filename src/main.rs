@@ -23,6 +23,16 @@ use syntect::{
     util::LinesWithEndings,
 };
 
+// TODO:
+//
+//   * specify limits
+//   * extra metadata for recursive repo listings?
+//   * all relative paths should be relative to settings.toml
+//   * basic, light, dark, and fancy default themes
+//   * automated tests
+//   * documentation
+//
+
 fn ts_to_date(ts: i64, offset: Option<i64>, format: Option<String>) -> String {
     let offset = offset.unwrap_or(0);
     let dt = NaiveDateTime::from_timestamp_opt(ts + offset, 0).expect("Invalid timestamp");
@@ -627,13 +637,15 @@ struct CliArgs {
 #[derive(Deserialize)]
 #[allow(dead_code)]
 struct GitsySettings {
-    output_dir: PathBuf,
     recursive_repo_dirs: Option<Vec<PathBuf>>,
     site_name: Option<String>,
     site_url: Option<String>,
     site_description: Option<String>,
+    asset_files: Option<Vec<String>>,
     #[serde(rename(deserialize = "gitsy_templates"))]
     templates: GitsySettingsTemplates,
+    #[serde(rename(deserialize = "gitsy_outputs"))]
+    outputs: GitsySettingsOutputs,
     render_markdown: Option<bool>,
     syntax_highlight: Option<bool>,
     syntax_highlight_theme: Option<String>,
@@ -654,12 +666,88 @@ struct GitsySettingsTemplates {
     error: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct GitsySettingsOutputs {
+    path: PathBuf,
+    repo_list: Option<String>,
+    repo_summary: Option<String>,
+    commit: Option<String>,
+    branch: Option<String>,
+    tag: Option<String>,
+    file: Option<String>,
+    dir: Option<String>,
+    error: Option<String>,
+    syntax_css: Option<String>,
+    global_assets: Option<String>,
+    repo_assets: Option<String>,
+}
+
+macro_rules! output_path_fn {
+    ($var:ident, $obj:ty, $id:ident, $is_dir:expr, $default:expr) => {
+        pub fn $var(&self, repo: Option<&GitRepo>, obj: Option<&$obj>) -> String {
+            let tmpl_str = self.$var.as_deref().unwrap_or($default).to_string();
+            let tmpl_str = match (tmpl_str.contains("%REPO%"), repo.is_some()) {
+                (true, true) => {
+                    let name = repo.map(|x| &x.name).unwrap();
+                    tmpl_str.replace("%REPO%", name)
+                },
+                (true, false) => {
+                    panic!("%REPO% variable not available for output path: {}", tmpl_str);
+                }
+                _ => tmpl_str,
+            };
+            let tmpl_str = match (tmpl_str.contains("%ID%"), obj.is_some()) {
+                (true, true) => {
+                    let name = obj.map(|x| &x.$id).unwrap();
+                    tmpl_str.replace("%ID%", name)
+                },
+                (true, false) => {
+                    panic!("%ID% variable not available for output path: {}", tmpl_str);
+                }
+                _ => tmpl_str,
+            };
+            let tmpl = PathBuf::from(tmpl_str);
+            let mut path = self.path.clone();
+            path.push(tmpl);
+            match $is_dir {
+                true => {
+                    let _ = std::fs::create_dir(&path);
+                },
+                false => {
+                    if let Some(dir) = path.parent() {
+                        let _ = std::fs::create_dir(dir);
+                    }
+                },
+            }
+            path.to_str()
+                .expect(&format!("Output is not a valid path: {}", path.display()))
+                .into()
+        }
+    };
+}
+//step_map_first!(boil_in_wort, Boil, Wort, |b: &Boil| { b.wort_start() });
+
+impl GitsySettingsOutputs {
+    output_path_fn!(repo_list,     GitObject, full_hash, false, "repos.html");
+    output_path_fn!(repo_summary,  GitObject, full_hash, false, "%REPO%/summary.html");
+    output_path_fn!(commit,        GitObject, full_hash, false, "%REPO%/commit/%ID%.html");
+    output_path_fn!(branch,        GitObject, full_hash, false, "%REPO%/branch/%ID%.html");
+    output_path_fn!(tag,           GitObject, full_hash, false, "%REPO%/tag/%ID%.html");
+    output_path_fn!(file,          GitFile,   id,        false, "%REPO%/file/%ID%.html");
+    output_path_fn!(syntax_css,    GitObject, full_hash, false, "%REPO%/file/syntax.css");
+    output_path_fn!(dir,           GitFile,   id,        false, "%REPO%/dir/%ID%.html");
+    output_path_fn!(error,         GitObject, full_hash, false, "404.html");
+    output_path_fn!(global_assets, GitObject, full_hash, true,  "assets/");
+    output_path_fn!(repo_assets  , GitObject, full_hash, true,  "%REPO%/assets/");
+}
+
 #[derive(Deserialize, Default)]
 struct GitsySettingsRepo {
     path: PathBuf,
     name: Option<String>,
     description: Option<String>,
     website: Option<String>,
+    asset_files: Option<Vec<String>>,
     render_markdown: Option<bool>,
     syntax_highlight: Option<bool>,
     syntax_highlight_theme: Option<String>,
@@ -679,8 +767,11 @@ impl PartialEq for GitsySettingsRepo {
 }
 impl Eq for GitsySettingsRepo {}
 
-fn write_rendered(file: &mut File, rendered: &str) {
-    file.write(rendered.as_bytes()).expect("failed to save rendered html");
+fn write_rendered(path: &str, rendered: &str) {
+    let mut file = File::create(path)
+        .expect(&format!("Unable to write to output path: {}", path));
+    file.write(rendered.as_bytes())
+        .expect(&format!("Failed to save rendered html to path: {}", path));
 }
 
 fn main() {
@@ -693,7 +784,7 @@ fn main() {
 
     // Get a list of all remaining TOML "tables" in the file.
     // These are the user-supplied individual repositories.
-    let reserved_keys = vec!("gitsy_templates","gitsy_extra");
+    let reserved_keys = vec!("gitsy_templates", "gitsy_outputs", "gitsy_extra");
     let settings_raw: HashMap<String, toml::Value> = toml::from_str(&toml).expect("blah");
     let table_keys: Vec<String> = settings_raw.iter().filter_map(|x| match x.1.is_table() {
         true => match reserved_keys.contains(&x.0.as_str()) {
@@ -756,7 +847,7 @@ fn main() {
     tera.register_function("ts_to_git_timestamp", TsTimestampFn{});
 
     // Create output directory
-    let _ = std::fs::create_dir(settings.output_dir.to_str().expect("Output path not set!"));
+    let _ = std::fs::create_dir(settings.outputs.path.to_str().expect("Output path invalid."));
 
     let generated_dt = chrono::offset::Local::now();
 
@@ -767,9 +858,9 @@ fn main() {
             Ok(m) if m.is_dir() => {},
             _ => continue,
         }
-        let path: String = dir.to_string_lossy().to_string();
+        let repo_path: String = dir.to_string_lossy().to_string();
         let name: String = dir.file_name().expect("Encountered directory with no name!").to_string_lossy().to_string();
-        let repo = Repository::open(path).expect("Unable to find git repository.");
+        let repo = Repository::open(&repo_path).expect("Unable to find git repository.");
         let metadata = GitsyMetadata {
             full_name: repo_desc.name.clone(),
             description: repo_desc.description.clone(),
@@ -797,12 +888,7 @@ fn main() {
 
         match tera.render(&settings.templates.repo_summary.as_deref().unwrap_or("summary.html"), &local_ctx) {
             Ok(rendered) => {
-                let mut output_path = settings.output_dir.clone();
-                output_path.push(&name);
-                let _ = std::fs::create_dir(output_path.to_str().expect("Output path not set!"));
-                output_path.push("summary.html");
-                let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-                write_rendered(&mut file, &rendered);
+                write_rendered(&settings.outputs.repo_summary(Some(&summary), None), &rendered);
             },
             Err(x) => match x.kind {
                 tera::ErrorKind::TemplateNotFound(_) if settings.templates.repo_summary.is_none() => {},
@@ -814,13 +900,7 @@ fn main() {
             local_ctx.insert("branch", branch);
             match tera.render(&settings.templates.branch.as_deref().unwrap_or("branch.html"), &local_ctx) {
                 Ok(rendered) => {
-                    let mut output_path = settings.output_dir.clone();
-                    output_path.push(&summary.name);
-                    output_path.push("branch");
-                    let _ = std::fs::create_dir(output_path.to_str().expect("Output path not set!"));
-                    output_path.push(format!("{}.html", branch.full_hash));
-                    let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-                    write_rendered(&mut file, &rendered);
+                    write_rendered(&settings.outputs.branch(Some(&summary), Some(branch)), &rendered);
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.branch.is_none() => {},
@@ -837,13 +917,7 @@ fn main() {
             }
             match tera.render(&settings.templates.tag.as_deref().unwrap_or("tag.html"), &local_ctx) {
                 Ok(rendered) => {
-                    let mut output_path = settings.output_dir.clone();
-                    output_path.push(&summary.name);
-                    output_path.push("tag");
-                    let _ = std::fs::create_dir(output_path.to_str().expect("Output path not set!"));
-                    output_path.push(format!("{}.html", tag.full_hash));
-                    let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-                    write_rendered(&mut file, &rendered);
+                    write_rendered(&settings.outputs.tag(Some(&summary), Some(tag)), &rendered);
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.tag.is_none() => {},
@@ -858,13 +932,7 @@ fn main() {
             local_ctx.try_insert("commit", &commit).expect("Failed to add commit to template engine.");
             match tera.render(&settings.templates.commit.as_deref().unwrap_or("commit.html"), &local_ctx) {
                 Ok(rendered) => {
-                    let mut output_path = settings.output_dir.clone();
-                    output_path.push(&summary.name);
-                    output_path.push("commit");
-                    let _ = std::fs::create_dir(output_path.to_str().expect("Output path not set!"));
-                    output_path.push(format!("{}.html", commit.full_hash));
-                    let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-                    write_rendered(&mut file, &rendered);
+                    write_rendered(&settings.outputs.commit(Some(&summary), Some(commit)), &rendered);
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.commit.is_none() => {},
@@ -886,12 +954,7 @@ fn main() {
                                       .unwrap_or("base16-ocean.light")).expect("Invalid syntax highlighting theme specified.");
             let css: String = css_for_theme_with_class_style(theme, syntect::html::ClassStyle::Spaced)
                 .expect("Invalid syntax highlighting theme specified.");
-            let mut output_path = settings.output_dir.clone();
-            output_path.push(&summary.name);
-            output_path.push("file");
-            output_path.push("syntax.css");
-            let mut file = std::fs::File::create(output_path.to_str().expect("CSS filename invalid!")).expect("CSS path not writeable!");
-            file.write(css.as_bytes()).expect("Failed to write CSS file!");
+            write_rendered(&settings.outputs.syntax_css(Some(&summary), None), css.as_str());
         }
 
         for file in summary.all_files.iter().filter(|x| x.kind == "file") {
@@ -899,13 +962,7 @@ fn main() {
             local_ctx.try_insert("file", &file).expect("Failed to add file to template engine.");
             match tera.render(&settings.templates.file.as_deref().unwrap_or("file.html"), &local_ctx) {
                 Ok(rendered) => {
-                    let mut output_path = settings.output_dir.clone();
-                    output_path.push(&summary.name);
-                    output_path.push("file");
-                    let _ = std::fs::create_dir(output_path.to_str().expect("Output path not set!"));
-                    output_path.push(format!("{}.html", file.id));
-                    let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-                    write_rendered(&mut file, &rendered);
+                    write_rendered(&settings.outputs.file(Some(&summary), Some(&file)), &rendered);
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.file.is_none() => {},
@@ -920,13 +977,7 @@ fn main() {
             local_ctx.try_insert("files", &listing).expect("Failed to add dir to template engine.");
             match tera.render(&settings.templates.dir.as_deref().unwrap_or("dir.html"), &local_ctx) {
                 Ok(rendered) => {
-                    let mut output_path = settings.output_dir.clone();
-                    output_path.push(&summary.name);
-                    output_path.push("dir");
-                    let _ = std::fs::create_dir(output_path.to_str().expect("Output path not set!"));
-                    output_path.push(format!("{}.html", dir.id));
-                    let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-                    write_rendered(&mut file, &rendered);
+                    write_rendered(&settings.outputs.dir(Some(&summary), Some(dir)), &rendered);
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.dir.is_none() => {},
@@ -934,6 +985,20 @@ fn main() {
                 },
             }
             local_ctx.remove("files");
+        }
+
+        if repo_desc.asset_files.is_some() {
+            let target_dir = settings.outputs.repo_assets(Some(&summary), None);
+            for src_file in repo_desc.asset_files.as_ref().unwrap() {
+                let src_file = PathBuf::from(repo_path.to_owned() + "/" + src_file);
+                let mut dst_file = PathBuf::from(&target_dir);
+                dst_file.push(src_file.file_name()
+                              .expect(&format!("Failed to copy repo asset file: {} ({})",
+                                               src_file.display(), repo_desc.name.as_deref().unwrap_or_default())));
+                std::fs::copy(&src_file, &dst_file)
+                    .expect(&format!("Failed to copy repo asset file: {} ({})",
+                                     src_file.display(), repo_desc.name.as_deref().unwrap_or_default()));
+            }
         }
 
         repos.push(summary);
@@ -958,10 +1023,7 @@ fn main() {
 
     match tera.render(&settings.templates.repo_list.as_deref().unwrap_or("repos.html"), &global_ctx) {
         Ok(rendered) => {
-            let mut output_path = settings.output_dir.clone();
-            output_path.push("repos.html");
-            let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-            write_rendered(&mut file, &rendered);
+            write_rendered(&settings.outputs.repo_list(None, None), &rendered);
         },
         Err(x) => match x.kind {
             tera::ErrorKind::TemplateNotFound(_) if settings.templates.repo_list.is_none() => {},
@@ -971,14 +1033,23 @@ fn main() {
 
     match tera.render(&settings.templates.error.as_deref().unwrap_or("404.html"), &global_ctx) {
         Ok(rendered) => {
-            let mut output_path = settings.output_dir.clone();
-            output_path.push("404.html");
-            let mut file = std::fs::File::create(output_path.to_str().expect("Output path not set!")).unwrap();
-            write_rendered(&mut file, &rendered);
+            write_rendered(&settings.outputs.error(None, None), &rendered);
         },
         Err(x) => match x.kind {
             tera::ErrorKind::TemplateNotFound(_) if settings.templates.error.is_none() => {},
             _ => println!("ERROR: {:?}", x),
         },
+    }
+
+    if settings.asset_files.is_some() {
+        let target_dir = settings.outputs.global_assets(None, None);
+        for src_file in settings.asset_files.unwrap() {
+            let src_file = PathBuf::from(src_file);
+            let mut dst_file = PathBuf::from(&target_dir);
+            dst_file.push(src_file.file_name()
+                          .expect(&format!("Failed to copy asset file: {}", src_file.display())));
+            std::fs::copy(&src_file, &dst_file)
+                .expect(&format!("Failed to copy asset file: {}", src_file.display()));
+        }
     }
 }
