@@ -25,12 +25,16 @@ use syntect::{
 
 // TODO:
 //
-//   * specify limits
+//   * verbose output
+//   * pagination
+//   * remote repositories
 //   * extra metadata for recursive repo listings?
 //   * all relative paths should be relative to settings.toml
 //   * basic, light, dark, and fancy default themes
+//   * split into modules
+//   * parallelize output generation
 //   * automated tests
-//   * documentation
+//   * documentation + examples
 //
 
 fn ts_to_date(ts: i64, offset: Option<i64>, format: Option<String>) -> String {
@@ -117,6 +121,7 @@ struct GitFile {
     kind: String,
     is_binary: bool,
     size: usize,
+    tree_depth: usize,
     contents: Option<String>,
     contents_safe: bool,
     contents_preformatted: bool,
@@ -157,7 +162,7 @@ struct GitDiffLine {
 }
 
 fn walk_file_tree(repo: &git2::Repository, rev: &str, files: &mut Vec<GitFile>,
-                  depth: usize, recurse: bool, prefix: &str) -> Result<(), Error> {
+                  depth: usize, max_depth: usize, recurse: bool, prefix: &str) -> Result<(), Error> {
     let obj = repo.revparse_single(rev)?;
     let tree = obj.peel_to_tree()?;
     for entry in tree.iter() {
@@ -186,30 +191,41 @@ fn walk_file_tree(repo: &git2::Repository, rev: &str, files: &mut Vec<GitFile>,
             mode: entry.filemode(),
             is_binary,
             size,
+            tree_depth: depth,
             contents: None,
             contents_safe: false,
             contents_preformatted: true,
         });
-        if recurse && entry.kind() == Some(git2::ObjectType::Tree) {
+        if recurse && depth < (max_depth - 1) && entry.kind() == Some(git2::ObjectType::Tree) {
             let prefix = name + "/";
-            walk_file_tree(repo, &entry.id().to_string(), files, depth+1, true, &prefix)?;
+            walk_file_tree(repo, &entry.id().to_string(), files,
+                           depth+1, max_depth, true, &prefix)?;
         }
     }
     Ok(())
 }
 
-fn parse_repo(repo: &Repository, name: &str, metadata: GitsyMetadata) -> Result<GitRepo, Error> {
+fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, metadata: GitsyMetadata) -> Result<GitRepo, Error> {
     let mut history: Vec<GitObject> = vec!();
     let mut branches: Vec<GitObject> = vec!();
     let mut tags: Vec<GitObject> = vec!();
     let mut commits: BTreeMap<String, GitObject> = BTreeMap::new();
+    let mut commit_count = 0;
+    let mut history_count = 0;
+    let mut branch_count = 0;
+    let mut tag_count = 0;
 
     let mut revwalk = repo.revwalk()?;
     revwalk.set_sorting(git2::Sort::TOPOLOGICAL)?;
     revwalk.push_head()?;
     for oid in revwalk {
         let oid = oid?;
+        if commit_count >= settings.limit_commits.unwrap_or(usize::MAX) ||
+            history_count >= settings.limit_history.unwrap_or(usize::MAX) {
+                break;
+        }
         commits.insert(oid.to_string(), parse_commit(repo, &oid.to_string())?);
+        commit_count += 1;
         let commit = repo.find_commit(oid)?;
         let obj = repo.revparse_single(&commit.id().to_string())?;
         let full_hash = commit.id().to_string();
@@ -249,25 +265,35 @@ fn parse_repo(repo: &Repository, name: &str, metadata: GitsyMetadata) -> Result<
             }
         }
 
-        history.push(GitObject {
-            full_hash,
-            short_hash,
-            ts_utc: commit.author().when().seconds(),
-            ts_offset: (commit.author().when().offset_minutes() as i64) * 60,
-            parents,
-            ref_name: None,
-            alt_refs,
-            author: GitAuthor {
-                name:  commit.author().name().map(|x| x.to_owned()),
-                email: commit.author().email().map(|x| x.to_owned()),
-            },
-            summary: Some(first_line(commit.message_bytes())),
-            stats: Some(stats),
-            ..Default::default()
-        });
+        if history_count < settings.limit_history.unwrap_or(usize::MAX) {
+            // TODO: this is basically a duplicate of the commit
+            // array, and really should be pointers to that array
+            // instead.  But it's not a quick task to switch to
+            // self-referential data structures in Rust.
+            history.push(GitObject {
+                full_hash,
+                short_hash,
+                ts_utc: commit.author().when().seconds(),
+                ts_offset: (commit.author().when().offset_minutes() as i64) * 60,
+                parents,
+                ref_name: None,
+                alt_refs,
+                author: GitAuthor {
+                    name:  commit.author().name().map(|x| x.to_owned()),
+                    email: commit.author().email().map(|x| x.to_owned()),
+                },
+                summary: Some(first_line(commit.message_bytes())),
+                stats: Some(stats),
+                ..Default::default()
+            });
+            history_count += 1;
+        }
     }
 
     for branch in repo.branches(None)? {
+        if branch_count >= settings.limit_branches.unwrap_or(usize::MAX) {
+            break;
+        }
         let (branch, _branch_type) = branch?;
         let refr = branch.get();
         let name = branch.name()?.unwrap_or("[unnamed]");
@@ -300,8 +326,12 @@ fn parse_repo(repo: &Repository, name: &str, metadata: GitsyMetadata) -> Result<
             message: commit.message().map(|x| x.to_string()),
             ..Default::default()
         });
+        branch_count += 1;
     }
     for tag in repo.tag_names(None)?.iter() {
+        if tag_count >= settings.limit_tags.unwrap_or(usize::MAX) {
+            break;
+        }
         let tag = tag.unwrap_or("[unnamed]");
         let obj = repo.revparse_single(tag)?;
         let commit = repo.find_tag(obj.id())?;
@@ -335,14 +365,18 @@ fn parse_repo(repo: &Repository, name: &str, metadata: GitsyMetadata) -> Result<
             summary,
             ..Default::default()
         });
+        tag_count += 1;
     }
 
     let mut root_files: Vec<GitFile> = vec!();
     let mut all_files: Vec<GitFile> = vec!();
-    walk_file_tree(&repo, "HEAD", &mut root_files, 0, false, "")?;
-    // TODO: maybe this should be optional?  Walking the whole tree
-    // could be slow on huge repos.
-    walk_file_tree(&repo, "HEAD", &mut all_files, 0, true, "")?;
+    let max_depth = settings.limit_tree_depth.unwrap_or(usize::MAX);
+    if max_depth > 0 {
+        walk_file_tree(&repo, "HEAD", &mut root_files, 0, usize::MAX, false, "")?;
+        // TODO: maybe this should be optional?  Walking the whole tree
+        // could be slow on huge repos.
+        walk_file_tree(&repo, "HEAD", &mut all_files, 0, max_depth, true, "")?;
+    }
 
     Ok(GitRepo {
         name: name.to_string(),
@@ -543,7 +577,7 @@ fn fill_file_contents(repo: &Repository, file: &GitFile, settings: &GitsySetting
 
 fn dir_listing(repo: &Repository, file: &GitFile) -> Result<Vec<GitFile>, Error> {
     let mut files: Vec<GitFile> = vec!();
-    walk_file_tree(&repo, &file.id, &mut files, 0, false, "")?;
+    walk_file_tree(&repo, &file.id, &mut files, 0, usize::MAX, false, "")?;
     Ok(files)
 }
 
@@ -646,6 +680,14 @@ struct GitsySettings {
     templates: GitsySettingsTemplates,
     #[serde(rename(deserialize = "gitsy_outputs"))]
     outputs: GitsySettingsOutputs,
+    limit_history: Option<usize>,
+    limit_commits: Option<usize>,
+    limit_branches: Option<usize>,
+    limit_tags: Option<usize>,
+    limit_tree_depth: Option<usize>,
+    limit_file_size: Option<usize>,
+    limit_repo_size: Option<usize>,
+    limit_total_size: Option<usize>,
     render_markdown: Option<bool>,
     syntax_highlight: Option<bool>,
     syntax_highlight_theme: Option<String>,
@@ -751,7 +793,15 @@ struct GitsySettingsRepo {
     render_markdown: Option<bool>,
     syntax_highlight: Option<bool>,
     syntax_highlight_theme: Option<String>,
-    attributes: BTreeMap<String, toml::Value>,
+    attributes: Option<BTreeMap<String, toml::Value>>,
+    limit_history: Option<usize>,
+    limit_commits: Option<usize>,
+    limit_branches: Option<usize>,
+    limit_tags: Option<usize>,
+    limit_tree_depth: Option<usize>,
+    limit_file_size: Option<usize>,
+    limit_repo_size: Option<usize>,
+    limit_total_size: Option<usize>,
 }
 
 use std::hash::{Hash, Hasher};
@@ -767,11 +817,12 @@ impl PartialEq for GitsySettingsRepo {
 }
 impl Eq for GitsySettingsRepo {}
 
-fn write_rendered(path: &str, rendered: &str) {
+fn write_rendered(path: &str, rendered: &str) -> usize {
     let mut file = File::create(path)
         .expect(&format!("Unable to write to output path: {}", path));
     file.write(rendered.as_bytes())
         .expect(&format!("Failed to save rendered html to path: {}", path));
+    rendered.as_bytes().len()
 }
 
 fn main() {
@@ -823,6 +874,14 @@ fn main() {
                         render_markdown: settings.render_markdown.clone(),
                         syntax_highlight: settings.syntax_highlight.clone(),
                         syntax_highlight_theme: settings.syntax_highlight_theme.clone(),
+                        limit_history: settings.limit_history.clone(),
+                        limit_commits: settings.limit_commits.clone(),
+                        limit_branches: settings.limit_branches.clone(),
+                        limit_tags: settings.limit_tags.clone(),
+                        limit_tree_depth: settings.limit_tree_depth.clone(),
+                        limit_file_size: settings.limit_file_size.clone(),
+                        limit_repo_size: settings.limit_repo_size.clone(),
+                        limit_total_size: settings.limit_total_size.clone(),
                         ..Default::default()
                     });
                 }
@@ -846,13 +905,25 @@ fn main() {
     tera.register_function("ts_to_date", TsDateFn{});
     tera.register_function("ts_to_git_timestamp", TsTimestampFn{});
 
+    macro_rules! size_check {
+        ($settings:ident, $cur:ident, $total:expr) => {
+            if $cur > $settings.limit_repo_size.unwrap_or(usize::MAX) {
+                break;
+            }
+            if $total + $cur > $settings.limit_total_size.unwrap_or(usize::MAX) {
+                break;
+            }
+        }
+    }
+
     // Create output directory
     let _ = std::fs::create_dir(settings.outputs.path.to_str().expect("Output path invalid."));
 
     let generated_dt = chrono::offset::Local::now();
-
+    let mut total_bytes = 0;
     let mut repos: Vec<GitRepo> = vec!();
     for repo_desc in &repo_descriptions {
+        let mut repo_bytes = 0;
         let dir = &repo_desc.path;
         match dir.metadata() {
             Ok(m) if m.is_dir() => {},
@@ -866,9 +937,9 @@ fn main() {
             description: repo_desc.description.clone(),
             website: repo_desc.website.clone(),
             clone: None,
-            attributes: repo_desc.attributes.clone(),
+            attributes: repo_desc.attributes.clone().unwrap_or_default(),
         };
-        let summary = parse_repo(&repo, &name, metadata).expect("Failed to analyze repo HEAD.");
+        let summary = parse_repo(&repo, &name, &repo_desc, metadata).expect("Failed to analyze repo HEAD.");
 
         let mut local_ctx = Context::from_serialize(&summary).unwrap();
         if let Some(extra) = &settings.extra {
@@ -888,7 +959,7 @@ fn main() {
 
         match tera.render(&settings.templates.repo_summary.as_deref().unwrap_or("summary.html"), &local_ctx) {
             Ok(rendered) => {
-                write_rendered(&settings.outputs.repo_summary(Some(&summary), None), &rendered);
+                repo_bytes += write_rendered(&settings.outputs.repo_summary(Some(&summary), None), &rendered);
             },
             Err(x) => match x.kind {
                 tera::ErrorKind::TemplateNotFound(_) if settings.templates.repo_summary.is_none() => {},
@@ -897,10 +968,11 @@ fn main() {
         }
 
         for branch in &summary.branches {
+            size_check!(repo_desc, repo_bytes, total_bytes);
             local_ctx.insert("branch", branch);
             match tera.render(&settings.templates.branch.as_deref().unwrap_or("branch.html"), &local_ctx) {
                 Ok(rendered) => {
-                    write_rendered(&settings.outputs.branch(Some(&summary), Some(branch)), &rendered);
+                    repo_bytes += write_rendered(&settings.outputs.branch(Some(&summary), Some(branch)), &rendered);
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.branch.is_none() => {},
@@ -911,13 +983,14 @@ fn main() {
         }
 
         for tag in &summary.tags {
+            size_check!(repo_desc, repo_bytes, total_bytes);
             local_ctx.insert("tag", tag);
             if let Some(commit) = summary.commits.get(tag.tagged_id.as_ref().unwrap()) {
                 local_ctx.insert("commit", &commit);
             }
             match tera.render(&settings.templates.tag.as_deref().unwrap_or("tag.html"), &local_ctx) {
                 Ok(rendered) => {
-                    write_rendered(&settings.outputs.tag(Some(&summary), Some(tag)), &rendered);
+                    repo_bytes += write_rendered(&settings.outputs.tag(Some(&summary), Some(tag)), &rendered);
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.tag.is_none() => {},
@@ -929,10 +1002,11 @@ fn main() {
         }
 
         for (_id, commit) in &summary.commits {
+            size_check!(repo_desc, repo_bytes, total_bytes);
             local_ctx.try_insert("commit", &commit).expect("Failed to add commit to template engine.");
             match tera.render(&settings.templates.commit.as_deref().unwrap_or("commit.html"), &local_ctx) {
                 Ok(rendered) => {
-                    write_rendered(&settings.outputs.commit(Some(&summary), Some(commit)), &rendered);
+                    repo_bytes += write_rendered(&settings.outputs.commit(Some(&summary), Some(commit)), &rendered);
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.commit.is_none() => {},
@@ -954,15 +1028,19 @@ fn main() {
                                       .unwrap_or("base16-ocean.light")).expect("Invalid syntax highlighting theme specified.");
             let css: String = css_for_theme_with_class_style(theme, syntect::html::ClassStyle::Spaced)
                 .expect("Invalid syntax highlighting theme specified.");
-            write_rendered(&settings.outputs.syntax_css(Some(&summary), None), css.as_str());
+            repo_bytes += write_rendered(&settings.outputs.syntax_css(Some(&summary), None), css.as_str());
         }
 
         for file in summary.all_files.iter().filter(|x| x.kind == "file") {
-            let file = fill_file_contents(&repo, &file, &repo_desc).expect("Failed to parse file.");
+            size_check!(repo_desc, repo_bytes, total_bytes);
+            let file = match file.size < repo_desc.limit_file_size.unwrap_or(usize::MAX) {
+                true => fill_file_contents(&repo, &file, &repo_desc).expect("Failed to parse file."),
+                false => file.clone(),
+            };
             local_ctx.try_insert("file", &file).expect("Failed to add file to template engine.");
             match tera.render(&settings.templates.file.as_deref().unwrap_or("file.html"), &local_ctx) {
                 Ok(rendered) => {
-                    write_rendered(&settings.outputs.file(Some(&summary), Some(&file)), &rendered);
+                    repo_bytes += write_rendered(&settings.outputs.file(Some(&summary), Some(&file)), &rendered);
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.file.is_none() => {},
@@ -973,11 +1051,15 @@ fn main() {
         }
 
         for dir in summary.all_files.iter().filter(|x| x.kind == "dir") {
+            size_check!(repo_desc, repo_bytes, total_bytes);
+            if dir.tree_depth >= repo_desc.limit_tree_depth.unwrap_or(usize::MAX) - 1 {
+                continue;
+            }
             let listing = dir_listing(&repo, &dir).expect("Failed to parse file.");
             local_ctx.try_insert("files", &listing).expect("Failed to add dir to template engine.");
             match tera.render(&settings.templates.dir.as_deref().unwrap_or("dir.html"), &local_ctx) {
                 Ok(rendered) => {
-                    write_rendered(&settings.outputs.dir(Some(&summary), Some(dir)), &rendered);
+                    repo_bytes += write_rendered(&settings.outputs.dir(Some(&summary), Some(dir)), &rendered);
                 },
                 Err(x) => match x.kind {
                     tera::ErrorKind::TemplateNotFound(_) if settings.templates.dir.is_none() => {},
@@ -998,10 +1080,16 @@ fn main() {
                 std::fs::copy(&src_file, &dst_file)
                     .expect(&format!("Failed to copy repo asset file: {} ({})",
                                      src_file.display(), repo_desc.name.as_deref().unwrap_or_default()));
+                if let Ok(meta) = std::fs::metadata(dst_file) {
+                    repo_bytes += meta.len() as usize;
+                }
             }
         }
 
         repos.push(summary);
+        println!("Wrote repo: {} ({} bytes)", name, repo_bytes);
+        total_bytes += repo_bytes;
+        size_check!(repo_desc, repo_bytes, total_bytes);
     }
 
     let mut global_ctx = Context::new();
@@ -1023,7 +1111,7 @@ fn main() {
 
     match tera.render(&settings.templates.repo_list.as_deref().unwrap_or("repos.html"), &global_ctx) {
         Ok(rendered) => {
-            write_rendered(&settings.outputs.repo_list(None, None), &rendered);
+            total_bytes += write_rendered(&settings.outputs.repo_list(None, None), &rendered);
         },
         Err(x) => match x.kind {
             tera::ErrorKind::TemplateNotFound(_) if settings.templates.repo_list.is_none() => {},
@@ -1033,7 +1121,7 @@ fn main() {
 
     match tera.render(&settings.templates.error.as_deref().unwrap_or("404.html"), &global_ctx) {
         Ok(rendered) => {
-            write_rendered(&settings.outputs.error(None, None), &rendered);
+            total_bytes += write_rendered(&settings.outputs.error(None, None), &rendered);
         },
         Err(x) => match x.kind {
             tera::ErrorKind::TemplateNotFound(_) if settings.templates.error.is_none() => {},
@@ -1050,6 +1138,11 @@ fn main() {
                           .expect(&format!("Failed to copy asset file: {}", src_file.display())));
             std::fs::copy(&src_file, &dst_file)
                 .expect(&format!("Failed to copy asset file: {}", src_file.display()));
+            if let Ok(meta) = std::fs::metadata(dst_file) {
+                total_bytes += meta.len() as usize;
+            }
         }
     }
+
+    println!("Total bytes written: {}", total_bytes);
 }

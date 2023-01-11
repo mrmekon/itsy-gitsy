@@ -1,26 +1,283 @@
+###############################################################################
+##
+## Global, site-wide configuration settings
+##
+###############################################################################
+
+# A friendly name for the generated site.
+#
+# This is accessible in all templates.
 site_name = "Trevor's Repos"
+
+# The URL where this generated site is hosted.
+#
+# This is accessible in all templates.
 site_url = "https://git.trevorbentley.com"
+
+# A description of the generated site.
+#
+# This is accessible in all templates.
 site_description = "A bunch of git repos in a stupid format."
 
-render_markdown = true
-syntax_highlight = true
-syntax_highlight_theme = "base16-ocean.light"
-
-asset_files = ["test.html"]
-
+# List of directories, each of which contains Git repositories to
+# index.
+#
+# For each directory listed here, Itsy-Gitsy imports all of the
+# immediate subdirectories as repositories.  Each repository is
+# imported with its name set to the name of the subdirectory it is in.
+#
+# Every repository imported in this way has the global setting from
+# this file applied.  It is not possible to apply per-repository
+# settings for bulk-imported repositories.  Repositories that require
+# specific configuration can be explicitly specified later in this
+# file.
 recursive_repo_dirs = ["repos/"]
 
+# List of files to copy to the site's `global_assets` directory.
+#
+# The files in this list are copied unmodified, and with the same name, to the
+# configured `global_asset` output directory.  Use for including global,
+# site-wide resources, such as stylesheets, images, and icons.
+#
+# Currently does NOT support globbing or directories.  Each file must be listed
+# individually.
+#
+# This can also be set per-repository, in which case the `repo_assets` output
+# directory is used.
+asset_files = ["test.html"]
+
+# Whether to render Markdown files in repos into HTML.
+#
+# Rendering Markdown can make site generation take more time.  It has potential
+# security implications, as user-generated input (files in the repo) are
+# formatted into HTML and served unescaped.  Use with caution.
+#
+# This can also be set per-repository.
+render_markdown = true
+
+# Whether render files with syntax highlighting, as HTML.
+#
+# Applying syntax highlighting is CPU-intensive, and greatly increases site
+# generation time.  It has potential security implications, as user-generated
+# input (files in the repo) are formatted into HTML and served unescaped.  Use
+# with caution.
+#
+# This can also be set per-repository.
+syntax_highlight = true
+
+# Which theme to use for syntax highlighting colors.
+#
+# The default themes from Syntect are available, namely:
+#
+# - `base16-ocean.light`
+# - `base16-ocean.dark`
+# - `base16-eighties.dark`
+# - `base16-mocha.dark`
+# - `InspiredGithub`
+# - `Solarized (dark)`
+# - `Solarized (light)`
+#
+syntax_highlight_theme = "base16-ocean.light"
+
+# Limits maximum number of history items (i.e. git log) to parse.
+#
+# After the limit is reached, no more history items will be processed or stored
+# in memory, and no more commits will be output to disk.  For large
+# repositories, this can increase processing speed and decrease memory and disk
+# usage.
+#
+# This can also be set per-repository.
+limit_history    = 500
+
+# Limits maximum number of commits to output.
+#
+# When the limit is reached, no more commits are written to disk.  Similar to
+# `limit_history`, but the entire git log is still read into RAM and provided
+# to the templates.
+#
+# This can also be set per-repository.
+limit_commits    = 500
+
+# Limits maximum number of branches to parse.
+#
+# When the limit is reached, no more branches are parsed in memory or provided
+# to the `branch` template.
+#
+# Since branch order is unsorted and non-deterministic, the most sensible
+# values for this are very large, or 0 (to disable branches).
+#
+# This can also be set per-repository.
+limit_branches   = 500
+
+# Limits maximum number of tags to parse.
+#
+# When the limit is reached, no more tags are parsed in memory or provided to
+# the `tag` template.
+#
+# Since tag order is unsorted and non-deterministic, the most sensible values
+# for this are very large, or 0 (to disable tags).
+#
+# This can also be set per-repository.
+limit_tags       = 500
+
+# Limits directory depth to traverse when parsing files.
+#
+# Limits the number of directories traversed when enumerating files in the
+# `all_files` entry, which is passed as part of the repository to each
+# template.  This can help reduce RAM usage, and potentially disk usage, for
+# repositories with a very large number of files or directories.
+#
+# Set to 0 to disable both `all_files` and `root_files`, i.e. do not parse any
+# file listing.  If set to 1 or greater, only applies to `all_files`.
+#
+# This can also be set per-repository.
+limit_tree_depth = 20
+
+# Limits size of files in repo with content previews.
+#
+# Only non-binary files smaller than this limit will have their contents
+# provided to the `file` template.  Large files are still processed, but do not
+# include the text contents.
+#
+# This can also be set per-repository.
+limit_file_size  = 2097152
+
+# Limits size of a single produced repository.
+#
+# Limits the size of a generated repository preview.  This is a low-precision
+# limit, terminating generation wherever it happens to be, and may lead to many
+# dead links in the final output.
+#
+# This limit is not strict: generation is terminated after the first file that
+# exceeds this limit.  The output size might somewhat overflow this limit.
+# Also, static repository assets specified in this configuration are NOT
+# included in this limit.
+#
+# This is intended merely as a safety mechanism to prevent massive run-away
+# disk usage.
+#
+# This can also be set per-repository.
+limit_repo_size  = 52428800
+
+# Limits total size of all output.
+#
+# Limits the size of the total run: the sum of all repositories.  This is a
+# low-precision limit, terminating generation wherever it happens to be, and
+# may lead to many dead links or entirely missing repositories.
+#
+# This limit is not strict: generation is terminated after the first file that
+# exceeds this limit.  The output size might somewhat overflow this limit.
+# Also, static repository assets specified in this configuration are NOT
+# included in this limit.
+#
+# This is intended merely as a safety mechanism to prevent massive run-away
+# disk usage.
+#
+# This can also be set per-repository.
+limit_total_size = 524288000
+
+
+
+###############################################################################
+##
+## Subsection specifying which files to use as templates.
+##
+## The individual templates are relative to the `path` directory.  Each
+## template is a single file using the Tera template engine's format for text
+## substitution.
+##
+###############################################################################
 [gitsy_templates]
+
+# Path to a folder containing Tera templates.
+#
+# All files with a .html extension found under this directory, and its
+# immediate children directories, are imported into the Tera template engine.
 path = "templates/"
+
+# Template responsible for the list of repositories.
+#
+# This template is evaluated with the list of all configured repositories.  It
+# is intended for providing an overview of the available repositories, but the
+# full details of each repository are also included.
+#
+# This template executes one time.
 repo_list    = "repos.html"
+
+# Template responsible for summarizing a single repository.
+#
+# This template is evaluated with a single parsed repository, with all repo
+# data (commits, branches, etc) available.
+#
+# This template executes one time per repository.
 repo_summary = "summary.html"
+
+# Template responsible for displaying a single commit.
+#
+# Called once per parsed commit, with both the whole repository and the current
+# commit available to the template.
+#
+# This template executes many times.
 commit       = "commit.html"
+
+# Template responsible for displaying a single branch.
+#
+# Called once per parsed branch, with both the whole repository and the current
+# branch available to the template.
+#
+# This template executes many times.
 branch       = "branch.html"
+
+# Template responsible for displaying a single tag.
+#
+# Called once per parsed tag, with both the whole repository and the current
+# tag available to the template.
+#
+# This template executes many times.
 tag          = "tag.html"
+
+# Template responsible for displaying a single file.
+#
+# Called once per parsed file, with both the whole repository and the current
+# file available to the template.
+#
+# This template executes many times.
 file         = "file.html"
+
+# Template responsible for displaying a single directory.
+#
+# Called once per parsed directory, with both the whole repository and the
+# current directory available to the template.
+#
+# This template executes many times.
 dir          = "dir.html"
+
+# Template responsible for displaying a site-wide error.
+#
+# Intended for 404 (page not found) errors.  If used, you must configure your
+# webserver to redirect HTTP errors to the generated error page.
+#
+# This template executes one time.
 error        = "404.html"
 
+
+
+###############################################################################
+##
+## Subsection specifying names of output files/directories.
+##
+## Each entry pairs with one of the entries in `gitsy_templates` above,
+## specifying the directories and filenames for the rendered output, after the
+## template engine has performed its substitutions.
+##
+## All outputs are relative to the `path` directory.
+##
+## There are currently two supported variables for paths:
+##
+## * "%REPO%" -- replaced with the name of the currently processing repository
+## * "%ID%" -- replaced with the ID of the currently processing object
+##
+###############################################################################
 [gitsy_outputs]
 path = "gen/"
 repo_list     = "repos.html"
@@ -32,18 +289,84 @@ file          = "%REPO%/file/%ID%.html"
 syntax_css    = "%REPO%/file/syntax.css"
 dir           = "%REPO%/dir/%ID%.html"
 error         = "404.html"
+
+# Output directory for files specified in global `asset_files`.
+#
+# Each input file is copied to this directory unmodified.
 global_assets = "assets/"
+
+# Output directory for files specified in per-repo `asset_files`.
+#
+# Each input file is copied to this directory unmodified.
 repo_assets   = "%REPO%/assets/"
 
-[gitsy_extra]
-global_user_defined_vars = "whatever"
-these_can_also_be_numbers = 5
-or_bools = true
 
+
+###############################################################################
+##
+## Subsection for arbitrary, global user data.
+##
+## These variables are available to every page template.  Add extra metadata
+## that you want available site-wide here.
+##
+###############################################################################
+[gitsy_extra]
+generated_by = "Itsy-Gitsy"
+#global_user_defined_var = "whatever"
+#these_can_also_be_numbers = 5
+#or_bools = true
+#or_other_toml_types = {like_dicts = "yep, those too"}
+
+
+
+###############################################################################
+##
+## Individual repository configurations.
+##
+###############################################################################
+
+# The section name is used as the repository name if no `name` attribute is
+# provided.
 [circadian]
+# Path to the Git repository.
 path = "more_repos/circadian"
+
+# Name of this repository, if different from the section name.
+name = "circadian"
+
+# A description of this repository.
+description = "A repository full of code"
+
+# URL of website associated with this repository.
 website = "https://circadian.trevorbentley.com"
-attributes = {some_extra_thing = "user defined", visible = false, number_of_bananas = 3}
-render_markdown = false
-syntax_highlighting = false
-asset_files = ["LICENSE"]
+
+# Dictionary of arbitrary, user-defined attributes associated with the repo.
+#
+# Specifying as an inline-table requires all keys to be on one line.
+#
+# Available in all repo-specific page templates.
+#
+attributes = { status = "active", type = "daemon" }
+
+# Per-repository settings, same as the global versions described above:
+
+#render_markdown = false
+#syntax_highlighting = false
+#syntax_highlight_theme = "base16-ocean.dark"
+#limit_history    = 500
+#limit_commits    = 500
+#limit_branches   = 500
+#limit_tags       = 500
+#limit_tree_depth = 20
+#limit_file_size  = 2097152
+#limit_repo_size  = 52428800
+#limit_total_size = 524288000
+#asset_files = ["LICENSE"]
+
+# An alternative way to specify the user-defined attributes.
+#
+# This method allows keys to be on their own lines.
+#
+#[circadian.attributes]
+#status = "active"
+#type = "daemon"

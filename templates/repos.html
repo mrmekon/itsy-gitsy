@@ -2,6 +2,6 @@
 
 {% block content %}
 {% for repo in repos | sort(attribute="name") -%}
-<a href="{{repo.name}}/summary.html">{{ repo.name }}</a> ({{repo.metadata.website}}) [{{repo.metadata.attributes | get(key="some_extra_thing", default="")}}] ({{ts_to_date(ts=repo.history[0].ts_utc, tz=repo.history[0].ts_offset)}})<br/>
+<a href="{{repo.name}}/summary.html">{{ repo.name }}</a> ({{repo.metadata.website}}) [{{repo.metadata.attributes | get(key="status", default="unknown")}}] ({{ts_to_date(ts=repo.history[0].ts_utc, tz=repo.history[0].ts_offset)}})<br/>
 {% endfor -%}
 {% endblock content %}
