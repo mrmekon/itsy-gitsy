@@ -285,7 +285,7 @@ error        = "404.html"
 ##
 ###############################################################################
 [gitsy_outputs]
-path = "gen/"
+path = "rendered/"
 repo_list     = "repos.html"
 repo_summary  = "%REPO%/summary.html"
 commit        = "%REPO%/commit/%ID%.html"
