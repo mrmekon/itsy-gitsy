@@ -314,7 +314,7 @@ repo_assets   = "%REPO%/assets/"
 # runs, all remote refs are fetched rather than recloning.
 #
 # Only non-authenticated HTTPS repositories are currently supported.
-cloned_repos  = "bare_repos/"
+cloned_repos  = "cloned_repos/"
 
 
 ###############################################################################
