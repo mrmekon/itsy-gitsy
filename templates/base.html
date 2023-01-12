@@ -1,7 +1,7 @@
 <html>
 <head>
 {% block html_head -%}
-<title>{{site_name}}</title>
+<title>{{site_name | default(value="Itsy-Gitsy")}}</title>
 {% block html_head_extra -%}
 {% endblock html_head_extra -%}
 {% endblock html_head -%}

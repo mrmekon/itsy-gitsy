@@ -893,8 +893,20 @@ fn write_rendered(path: &str, rendered: &str) -> usize {
 fn main() {
     let start_all = std::time::Instant::now();
     let cli = CliArgs::parse();
-    let config_path = cli.config.as_deref().unwrap_or(Path::new("config.toml"));
+    let config_path = cli.config.as_deref().unwrap_or(Path::new("config.toml")).to_owned();
     let config_dir = config_path.parent().expect("Config file not in valid directory.").to_owned();
+    let config_dir = match config_dir.to_str().unwrap_or_default().len() > 0 {
+        true => config_dir,
+        false => PathBuf::from("."),
+    };
+    let config_path = match config_path.canonicalize() {
+        Ok(d) => d,
+        _ => config_path.clone(),
+    };
+    let config_dir = match config_dir.canonicalize() {
+        Ok(d) => d,
+        _ => config_dir.clone(),
+    };
     VERBOSITY.store(match cli.quiet {
         true => 0,
         false => (cli.verbose + 1).into(),
@@ -1002,6 +1014,11 @@ fn main() {
     let mut global_bytes = 0;
     let mut total_bytes = 0;
     let mut repos: Vec<GitRepo> = vec!();
+
+    if repo_descriptions.len() == 0 {
+        panic!("No Git repositories defined!  Please check your configuration file ({})",
+               config_path.display());
+    }
 
     // Sort the repositories by name
     let mut repo_vec: Vec<GitsySettingsRepo> = repo_descriptions.drain().collect();

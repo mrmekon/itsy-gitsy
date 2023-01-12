@@ -7,17 +7,17 @@
 # A friendly name for the generated site.
 #
 # This is accessible in all templates.
-site_name = "Trevor's Repos"
+#site_name = ""
 
 # The URL where this generated site is hosted.
 #
 # This is accessible in all templates.
-site_url = "https://git.trevorbentley.com"
+#site_url = ""
 
 # A description of the generated site.
 #
 # This is accessible in all templates.
-site_description = "A bunch of git repos in a stupid format."
+#site_description = ""
 
 # List of directories, each of which contains Git repositories to
 # index.
@@ -31,7 +31,7 @@ site_description = "A bunch of git repos in a stupid format."
 # settings for bulk-imported repositories.  Repositories that require
 # specific configuration can be explicitly specified later in this
 # file.
-recursive_repo_dirs = ["repos/"]
+#recursive_repo_dirs = []
 
 # List of files to copy to the site's `global_assets` directory.
 #
@@ -44,7 +44,7 @@ recursive_repo_dirs = ["repos/"]
 #
 # This can also be set per-repository, in which case the `repo_assets` output
 # directory is used.
-asset_files = ["test.html"]
+#asset_files = []
 
 # Whether to render Markdown files in repos into HTML.
 #
@@ -87,7 +87,7 @@ syntax_highlight_theme = "base16-ocean.light"
 # usage.
 #
 # This can also be set per-repository.
-limit_history    = 500
+#limit_history    = 500
 
 # Limits maximum number of commits to output.
 #
@@ -96,7 +96,7 @@ limit_history    = 500
 # to the templates.
 #
 # This can also be set per-repository.
-limit_commits    = 500
+#limit_commits    = 500
 
 # Limits maximum number of branches to parse.
 #
@@ -107,7 +107,7 @@ limit_commits    = 500
 # values for this are very large, or 0 (to disable branches).
 #
 # This can also be set per-repository.
-limit_branches   = 500
+#limit_branches   = 500
 
 # Limits maximum number of tags to parse.
 #
@@ -118,7 +118,7 @@ limit_branches   = 500
 # for this are very large, or 0 (to disable tags).
 #
 # This can also be set per-repository.
-limit_tags       = 500
+#limit_tags       = 500
 
 # Limits directory depth to traverse when parsing files.
 #
@@ -131,7 +131,7 @@ limit_tags       = 500
 # file listing.  If set to 1 or greater, only applies to `all_files`.
 #
 # This can also be set per-repository.
-limit_tree_depth = 20
+#limit_tree_depth = 20
 
 # Limits size of files in repo with content previews.
 #
@@ -140,7 +140,7 @@ limit_tree_depth = 20
 # include the text contents.
 #
 # This can also be set per-repository.
-limit_file_size  = 2097152
+#limit_file_size  = 2097152
 
 # Limits size of a single produced repository.
 #
@@ -157,7 +157,7 @@ limit_file_size  = 2097152
 # disk usage.
 #
 # This can also be set per-repository.
-limit_repo_size  = 52428800
+#limit_repo_size  = 52428800
 
 # Limits total size of all output.
 #
@@ -174,7 +174,7 @@ limit_repo_size  = 52428800
 # disk usage.
 #
 # This can also be set per-repository.
-limit_total_size = 524288000
+#limit_total_size = 524288000
 
 
 
@@ -342,18 +342,19 @@ generated_by = "Itsy-Gitsy"
 
 # The section name is used as the repository name if no `name` attribute is
 # provided.
-[circadian]
+#[my_repository]
+
 # Path to the Git repository.
-path = "more_repos/circadian"
+#path = "/path/to/my_repository"
 
 # Name of this repository, if different from the section name.
-name = "circadian"
+#name = "my_repository"
 
 # A description of this repository.
-description = "A repository full of code"
+#description = ""
 
 # URL of website associated with this repository.
-website = "https://circadian.trevorbentley.com"
+#website = ""
 
 # Dictionary of arbitrary, user-defined attributes associated with the repo.
 #
@@ -361,7 +362,7 @@ website = "https://circadian.trevorbentley.com"
 #
 # Available in all repo-specific page templates.
 #
-attributes = { status = "active", type = "daemon" }
+#attributes = { status = "active", type = "daemon" }
 
 # Per-repository settings, same as the global versions described above:
 
@@ -386,5 +387,7 @@ attributes = { status = "active", type = "daemon" }
 #status = "active"
 #type = "daemon"
 
-[ossuary]
-path = "https://github.com/mrmekon/ossuary"
+# Remote HTTPS repositories can also be specified:
+#
+#[remote_repo]
+#path = "https://github.com/my_user_name/remote_repo"
