@@ -942,13 +942,28 @@ fn main() {
     // save the ones that are successful.  If no repo name is
     // specified, use the TOML table name.
     let mut repo_descriptions: HashSet<GitsySettingsRepo> = HashSet::new();
+    macro_rules! global_to_repo {
+        ($settings:ident, $repo:ident, $field:ident) => {
+            if $repo.$field.is_none() { $repo.$field = $settings.$field.clone() }
+        }
+    }
     for k in &table_keys {
         let v = settings_raw.get(k).unwrap();
         match toml::from_str::<GitsySettingsRepo>(&v.to_string()) {
             Ok(mut repo) => {
-                if repo.name.is_none() {
-                    repo.name = Some(k.clone());
-                }
+                if repo.name.is_none() { repo.name = Some(k.clone()); }
+                global_to_repo!(settings, repo, render_markdown);
+                global_to_repo!(settings, repo, syntax_highlight);
+                global_to_repo!(settings, repo, syntax_highlight_theme);
+                global_to_repo!(settings, repo, limit_history);
+                global_to_repo!(settings, repo, limit_commits);
+                global_to_repo!(settings, repo, limit_branches);
+                global_to_repo!(settings, repo, limit_tags);
+                global_to_repo!(settings, repo, limit_tree_depth);
+                global_to_repo!(settings, repo, limit_file_size);
+                global_to_repo!(settings, repo, limit_repo_size);
+                global_to_repo!(settings, repo, limit_total_size);
+
                 repo_descriptions.insert(repo);
             },
             Err(e) => {
