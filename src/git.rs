@@ -1,7 +1,7 @@
-use crate::{error, loud, loudest};
 use crate::settings::GitsySettingsRepo;
-use git2::{DiffOptions, Repository, Error};
-use serde::{Serialize, Deserialize};
+use crate::{error, loud, loudest};
+use git2::{DiffOptions, Error, Repository};
+use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
@@ -98,7 +98,7 @@ pub struct GitDiffFile {
     pub extra: String,
     pub additions: usize,
     pub deletions: usize,
-    pub hunks: Vec<GitDiffHunk>
+    pub hunks: Vec<GitDiffHunk>,
 }
 
 #[derive(Serialize, Default)]
@@ -114,8 +114,15 @@ pub struct GitDiffLine {
     pub text: String,
 }
 
-fn walk_file_tree(repo: &git2::Repository, rev: &str, files: &mut Vec<GitFile>,
-                  depth: usize, max_depth: usize, recurse: bool, prefix: &str) -> Result<(), Error> {
+fn walk_file_tree(
+    repo: &git2::Repository,
+    rev: &str,
+    files: &mut Vec<GitFile>,
+    depth: usize,
+    max_depth: usize,
+    recurse: bool,
+    prefix: &str,
+) -> Result<(), Error> {
     let obj = repo.revparse_single(rev)?;
     let tree = obj.peel_to_tree()?;
     for entry in tree.iter() {
@@ -151,23 +158,35 @@ fn walk_file_tree(repo: &git2::Repository, rev: &str, files: &mut Vec<GitFile>,
         });
         if recurse && depth < (max_depth - 1) && entry.kind() == Some(git2::ObjectType::Tree) {
             let prefix = path + "/";
-            walk_file_tree(repo, &entry.id().to_string(), files,
-                           depth+1, max_depth, true, &prefix)?;
+            walk_file_tree(
+                repo,
+                &entry.id().to_string(),
+                files,
+                depth + 1,
+                max_depth,
+                true,
+                &prefix,
+            )?;
         }
     }
     Ok(())
 }
 
 pub fn dir_listing(repo: &Repository, file: &GitFile) -> Result<Vec<GitFile>, Error> {
-    let mut files: Vec<GitFile> = vec!();
+    let mut files: Vec<GitFile> = vec![];
     walk_file_tree(&repo, &file.id, &mut files, 0, usize::MAX, false, "")?;
     Ok(files)
 }
 
-pub fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, metadata: GitsyMetadata) -> Result<GitRepo, Error> {
-    let mut history: Vec<GitObject> = vec!();
-    let mut branches: Vec<GitObject> = vec!();
-    let mut tags: Vec<GitObject> = vec!();
+pub fn parse_repo(
+    repo: &Repository,
+    name: &str,
+    settings: &GitsySettingsRepo,
+    metadata: GitsyMetadata,
+) -> Result<GitRepo, Error> {
+    let mut history: Vec<GitObject> = vec![];
+    let mut branches: Vec<GitObject> = vec![];
+    let mut tags: Vec<GitObject> = vec![];
     let mut commits: BTreeMap<String, GitObject> = BTreeMap::new();
     let mut commit_count = 0;
     let mut history_count = 0;
@@ -181,8 +200,12 @@ pub fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, m
         if let (Some(target), Some(name)) = (refr.target(), refr.shorthand()) {
             let id = target.to_string();
             match references.contains_key(&id) {
-                false => { references.insert(target.to_string(), vec!(name.to_string())); },
-                true => { references.get_mut(&id).unwrap().push(name.to_string()); },
+                false => {
+                    references.insert(target.to_string(), vec![name.to_string()]);
+                }
+                true => {
+                    references.get_mut(&id).unwrap().push(name.to_string());
+                }
             }
         }
     }
@@ -194,9 +217,10 @@ pub fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, m
     loudest!(" - Parsing history:");
     for oid in revwalk {
         let oid = oid?;
-        if commit_count >= settings.limit_commits.unwrap_or(usize::MAX) ||
-            history_count >= settings.limit_history.unwrap_or(usize::MAX) {
-                break;
+        if commit_count >= settings.limit_commits.unwrap_or(usize::MAX)
+            || history_count >= settings.limit_history.unwrap_or(usize::MAX)
+        {
+            break;
         }
         commits.insert(oid.to_string(), parse_commit(repo, &oid.to_string())?);
         commit_count += 1;
@@ -205,7 +229,7 @@ pub fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, m
         let full_hash = commit.id().to_string();
         let short_hash = obj.short_id()?.as_str().unwrap_or_default().to_string();
 
-        let mut parents: Vec<String> = vec!();
+        let mut parents: Vec<String> = vec![];
         let a = if commit.parents().len() == 1 {
             let parent = commit.parent(0)?;
             parents.push(parent.id().to_string());
@@ -223,8 +247,10 @@ pub fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, m
             deletions: stats.deletions(),
         };
 
-        let alt_refs: Vec<String> = references.get(&commit.id().to_string())
-            .map(|x| x.to_owned()).unwrap_or_default();
+        let alt_refs: Vec<String> = references
+            .get(&commit.id().to_string())
+            .map(|x| x.to_owned())
+            .unwrap_or_default();
 
         if history_count < settings.limit_history.unwrap_or(usize::MAX) {
             loudest!("   + {} {}", full_hash, first_line(commit.message_bytes()));
@@ -241,7 +267,7 @@ pub fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, m
                 ref_name: None,
                 alt_refs,
                 author: GitAuthor {
-                    name:  commit.author().name().map(|x| x.to_owned()),
+                    name: commit.author().name().map(|x| x.to_owned()),
                     email: commit.author().email().map(|x| x.to_owned()),
                 },
                 summary: Some(first_line(commit.message_bytes())),
@@ -267,7 +293,7 @@ pub fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, m
         // this is a bad idea?
         match refr.kind() {
             Some(k) if k == git2::ReferenceType::Symbolic => continue,
-            _ => {},
+            _ => {}
         }
         let commit = repo.find_commit(obj.id())?;
         let full_hash = obj.id().to_string();
@@ -278,7 +304,7 @@ pub fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, m
             short_hash,
             ts_utc: commit.author().when().seconds(),
             ts_offset: (commit.author().when().offset_minutes() as i64) * 60,
-            parents: vec!(),
+            parents: vec![],
             ref_name: Some(name.to_string()),
             author: GitAuthor {
                 name: commit.author().name().map(|x| x.to_owned()),
@@ -323,9 +349,8 @@ pub fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, m
             Some(t) => (t.when().seconds(), (t.when().offset_minutes() as i64) * 60),
             _ => (0, 0),
         };
-        let (author,email) = match commit.tagger() {
-            Some(t) => (t.name().map(|x| x.to_owned()),
-                        t.email().map(|x| x.to_owned())),
+        let (author, email) = match commit.tagger() {
+            Some(t) => (t.name().map(|x| x.to_owned()), t.email().map(|x| x.to_owned())),
             _ => (None, None),
         };
         let summary = match commit.message_bytes() {
@@ -339,10 +364,7 @@ pub fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, m
             ts_utc: ts,
             ts_offset: tz,
             ref_name: Some(tag.to_string()),
-            author: GitAuthor {
-                name: author,
-                email,
-            },
+            author: GitAuthor { name: author, email },
             tagged_id: Some(commit.target_id().to_string()),
             message: commit.message().map(|x| x.to_string()),
             summary,
@@ -352,8 +374,8 @@ pub fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, m
     }
     loud!(" - parsed {} tags", tag_count);
 
-    let mut root_files: Vec<GitFile> = vec!();
-    let mut all_files: Vec<GitFile> = vec!();
+    let mut root_files: Vec<GitFile> = vec![];
+    let mut all_files: Vec<GitFile> = vec![];
     let max_depth = settings.limit_tree_depth.unwrap_or(usize::MAX);
     if max_depth > 0 {
         loudest!(" - Walking root files");
@@ -380,23 +402,21 @@ pub fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, m
 pub fn parse_commit(repo: &Repository, refr: &str) -> Result<GitObject, Error> {
     let obj = repo.revparse_single(refr)?;
     let commit = repo.find_commit(obj.id())?;
-    let mut parents: Vec<String> = vec!();
+    let mut parents: Vec<String> = vec![];
 
     let a = match commit.parents().len() {
         x if x == 1 => {
             let parent = commit.parent(0).unwrap();
             parents.push(parent.id().to_string());
             Some(parent.tree()?)
-        },
+        }
         x if x > 1 => {
             for parent in commit.parents() {
                 parents.push(parent.id().to_string());
             }
             None
-        },
-        _ => {
-            None
-        },
+        }
+        _ => None,
     };
     let b = commit.tree()?;
     let mut diffopts = DiffOptions::new();
@@ -409,22 +429,38 @@ pub fn parse_commit(repo: &Repository, refr: &str) -> Result<GitObject, Error> {
         deletions: stats.deletions(),
         ..Default::default()
     };
-    let files: Rc<RefCell<Vec<GitDiffFile>>> = Rc::new(RefCell::new(vec!()));
+    let files: Rc<RefCell<Vec<GitDiffFile>>> = Rc::new(RefCell::new(vec![]));
 
     diff.foreach(
         &mut |file, _progress| {
             let mut file_diff: GitDiffFile = Default::default();
             file_diff.newfile = match file.status() {
                 git2::Delta::Deleted => "/dev/null".to_owned(),
-                _ => file.new_file().path().map(|x| "b/".to_string() + &x.to_string_lossy()).unwrap_or("/dev/null".to_string()),
+                _ => file
+                    .new_file()
+                    .path()
+                    .map(|x| "b/".to_string() + &x.to_string_lossy())
+                    .unwrap_or("/dev/null".to_string()),
             };
             file_diff.oldfile = match file.status() {
                 git2::Delta::Added => "/dev/null".to_owned(),
-                _ => file.old_file().path().map(|x| "a/".to_string() + &x.to_string_lossy()).unwrap_or("/dev/null".to_string()),
+                _ => file
+                    .old_file()
+                    .path()
+                    .map(|x| "a/".to_string() + &x.to_string_lossy())
+                    .unwrap_or("/dev/null".to_string()),
             };
             file_diff.basefile = match file.status() {
-                git2::Delta::Added => file.new_file().path().map(|x| x.to_string_lossy().to_string()).unwrap_or("/dev/null".to_string()),
-                _ => file.old_file().path().map(|x| x.to_string_lossy().to_string()).unwrap_or("/dev/null".to_string()),
+                git2::Delta::Added => file
+                    .new_file()
+                    .path()
+                    .map(|x| x.to_string_lossy().to_string())
+                    .unwrap_or("/dev/null".to_string()),
+                _ => file
+                    .old_file()
+                    .path()
+                    .map(|x| x.to_string_lossy().to_string())
+                    .unwrap_or("/dev/null".to_string()),
             };
             file_diff.oldid = file.old_file().id().to_string();
             file_diff.newid = file.new_file().id().to_string();
@@ -443,7 +479,10 @@ pub fn parse_commit(repo: &Repository, refr: &str) -> Result<GitObject, Error> {
         Some(&mut |_file, _hunk, line| {
             let mut files = files.borrow_mut();
             let file_diff: &mut GitDiffFile = files.last_mut().expect("Diff hunk not associated with a file!");
-            let hunk_diff: &mut GitDiffHunk = file_diff.hunks.last_mut().expect("Diff line not associated with a hunk!");
+            let hunk_diff: &mut GitDiffHunk = file_diff
+                .hunks
+                .last_mut()
+                .expect("Diff line not associated with a hunk!");
             let (kind, prefix) = match line.origin() {
                 ' ' => ("ctx", " "),
                 '-' => ("del", "-"),
@@ -453,7 +492,7 @@ pub fn parse_commit(repo: &Repository, refr: &str) -> Result<GitObject, Error> {
             match line.origin() {
                 '-' => file_diff.deletions += 1,
                 '+' => file_diff.additions += 1,
-                _ => {},
+                _ => {}
             }
             let line_diff = GitDiffLine {
                 text: String::from_utf8_lossy(line.content()).to_string(),
@@ -462,15 +501,15 @@ pub fn parse_commit(repo: &Repository, refr: &str) -> Result<GitObject, Error> {
             };
             hunk_diff.lines.push(line_diff);
             true
-        })
+        }),
     )?;
 
     match Rc::try_unwrap(files) {
         Ok(files) => {
             let files: Vec<GitDiffFile> = files.into_inner();
             commit_diff.files = files;
-        },
-        Err(_) => {},
+        }
+        Err(_) => {}
     }
 
     let tree = obj.peel_to_tree()?;
@@ -483,7 +522,7 @@ pub fn parse_commit(repo: &Repository, refr: &str) -> Result<GitObject, Error> {
         tree_id: Some(tree.id().to_string()),
         parents,
         ref_name: None,
-        alt_refs: vec!(),
+        alt_refs: vec![],
         author: GitAuthor {
             name: commit.author().name().map(|x| x.to_string()),
             email: commit.author().email().map(|x| x.to_string()),

@@ -1,10 +1,6 @@
-use clap::Parser;
 use crate::error;
-use crate::git::{
-    GitFile,
-    GitObject,
-    GitRepo,
-};
+use crate::git::{GitFile, GitObject, GitRepo};
+use clap::Parser;
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{create_dir_all, read_dir, read_to_string};
@@ -39,7 +35,10 @@ impl GitsyCli {
     pub fn new() -> Self {
         let cli = CliArgs::parse();
         let config_path = cli.config.as_deref().unwrap_or(Path::new("config.toml")).to_owned();
-        let config_dir = config_path.parent().expect("Config file not in valid directory.").to_owned();
+        let config_dir = config_path
+            .parent()
+            .expect("Config file not in valid directory.")
+            .to_owned();
         let config_dir = match config_dir.to_str().unwrap_or_default().len() > 0 {
             true => config_dir,
             false => PathBuf::from("."),
@@ -52,17 +51,19 @@ impl GitsyCli {
             Ok(d) => d,
             _ => config_dir.clone(),
         };
-        crate::util::VERBOSITY.store(match cli.quiet {
-            true => 0,
-            false => (cli.verbose + 1).into(),
-        }, Ordering::Relaxed);
+        crate::util::VERBOSITY.store(
+            match cli.quiet {
+                true => 0,
+                false => (cli.verbose + 1).into(),
+            },
+            Ordering::Relaxed,
+        );
         GitsyCli {
             path: config_path,
             dir: config_dir,
         }
     }
 }
-
 
 #[derive(Deserialize, Debug)]
 pub struct GitsySettingsTemplates {
@@ -102,7 +103,7 @@ macro_rules! output_path_fn {
                 (true, true) => {
                     let name = repo.map(|x| &x.name).unwrap();
                     tmpl_str.replace("%REPO%", name)
-                },
+                }
                 (true, false) => {
                     panic!("%REPO% variable not available for output path: {}", tmpl_str);
                 }
@@ -112,7 +113,7 @@ macro_rules! output_path_fn {
                 (true, true) => {
                     let name = obj.map(|x| &x.$id).unwrap();
                     tmpl_str.replace("%ID%", name)
-                },
+                }
                 (true, false) => {
                     panic!("%ID% variable not available for output path: {}", tmpl_str);
                 }
@@ -124,12 +125,12 @@ macro_rules! output_path_fn {
             match $is_dir {
                 true => {
                     let _ = create_dir_all(&path);
-                },
+                }
                 false => {
                     if let Some(dir) = path.parent() {
                         let _ = create_dir_all(dir);
                     }
-                },
+                }
             }
             path.to_str()
                 .expect(&format!("Output is not a valid path: {}", path.display()))
@@ -140,17 +141,17 @@ macro_rules! output_path_fn {
 //step_map_first!(boil_in_wort, Boil, Wort, |b: &Boil| { b.wort_start() });
 
 impl GitsySettingsOutputs {
-    output_path_fn!(repo_list,     GitObject, full_hash, false, "repos.html");
-    output_path_fn!(repo_summary,  GitObject, full_hash, false, "%REPO%/summary.html");
-    output_path_fn!(commit,        GitObject, full_hash, false, "%REPO%/commit/%ID%.html");
-    output_path_fn!(branch,        GitObject, full_hash, false, "%REPO%/branch/%ID%.html");
-    output_path_fn!(tag,           GitObject, full_hash, false, "%REPO%/tag/%ID%.html");
-    output_path_fn!(file,          GitFile,   id,        false, "%REPO%/file/%ID%.html");
-    output_path_fn!(syntax_css,    GitObject, full_hash, false, "%REPO%/file/syntax.css");
-    output_path_fn!(dir,           GitFile,   id,        false, "%REPO%/dir/%ID%.html");
-    output_path_fn!(error,         GitObject, full_hash, false, "404.html");
-    output_path_fn!(global_assets, GitObject, full_hash, true,  "assets/");
-    output_path_fn!(repo_assets  , GitObject, full_hash, true,  "%REPO%/assets/");
+    output_path_fn!(repo_list, GitObject, full_hash, false, "repos.html");
+    output_path_fn!(repo_summary, GitObject, full_hash, false, "%REPO%/summary.html");
+    output_path_fn!(commit, GitObject, full_hash, false, "%REPO%/commit/%ID%.html");
+    output_path_fn!(branch, GitObject, full_hash, false, "%REPO%/branch/%ID%.html");
+    output_path_fn!(tag, GitObject, full_hash, false, "%REPO%/tag/%ID%.html");
+    output_path_fn!(file, GitFile, id, false, "%REPO%/file/%ID%.html");
+    output_path_fn!(syntax_css, GitObject, full_hash, false, "%REPO%/file/syntax.css");
+    output_path_fn!(dir, GitFile, id, false, "%REPO%/dir/%ID%.html");
+    output_path_fn!(error, GitObject, full_hash, false, "404.html");
+    output_path_fn!(global_assets, GitObject, full_hash, true, "assets/");
+    output_path_fn!(repo_assets, GitObject, full_hash, true, "%REPO%/assets/");
 }
 
 #[derive(Clone, Deserialize, Default, Debug)]
@@ -222,22 +223,26 @@ impl GitsySettings {
         let settings: GitsySettings = toml::from_str(&toml).expect("Configuration file is invalid.");
 
         // Settings are valid, so let's move into the directory with the config file
-        if cli.dir.to_str().unwrap_or_default().len() > 0 { // empty string means current directory
+        if cli.dir.to_str().unwrap_or_default().len() > 0 {
+            // empty string means current directory
             std::env::set_current_dir(&cli.dir)
                 .expect(&format!("Unable to set working directory to: {}", cli.dir.display()));
         }
 
         // Get a list of all remaining TOML "tables" in the file.
         // These are the user-supplied individual repositories.
-        let reserved_keys = vec!("gitsy_templates", "gitsy_outputs", "gitsy_extra");
+        let reserved_keys = vec!["gitsy_templates", "gitsy_outputs", "gitsy_extra"];
         let settings_raw: HashMap<String, toml::Value> = toml::from_str(&toml).expect("blah");
-        let table_keys: Vec<String> = settings_raw.iter().filter_map(|x| match x.1.is_table() {
-            true => match reserved_keys.contains(&x.0.as_str()) {
-                false => Some(x.0.clone()),
-                true => None,
-            },
-            false => None
-        }).collect();
+        let table_keys: Vec<String> = settings_raw
+            .iter()
+            .filter_map(|x| match x.1.is_table() {
+                true => match reserved_keys.contains(&x.0.as_str()) {
+                    false => Some(x.0.clone()),
+                    true => None,
+                },
+                false => None,
+            })
+            .collect();
 
         // Try to convert each unknown "table" into a repo struct, and
         // save the ones that are successful.  If no repo name is
@@ -245,14 +250,18 @@ impl GitsySettings {
         let mut repo_descriptions: HashSet<GitsySettingsRepo> = HashSet::new();
         macro_rules! global_to_repo {
             ($settings:ident, $repo:ident, $field:ident) => {
-                if $repo.$field.is_none() { $repo.$field = $settings.$field.clone() }
-            }
+                if $repo.$field.is_none() {
+                    $repo.$field = $settings.$field.clone()
+                }
+            };
         }
         for k in &table_keys {
             let v = settings_raw.get(k).unwrap();
             match toml::from_str::<GitsySettingsRepo>(&v.to_string()) {
                 Ok(mut repo) => {
-                    if repo.name.is_none() { repo.name = Some(k.clone()); }
+                    if repo.name.is_none() {
+                        repo.name = Some(k.clone());
+                    }
                     global_to_repo!(settings, repo, render_markdown);
                     global_to_repo!(settings, repo, syntax_highlight);
                     global_to_repo!(settings, repo, syntax_highlight_theme);
@@ -266,10 +275,10 @@ impl GitsySettings {
                     global_to_repo!(settings, repo, limit_total_size);
 
                     repo_descriptions.insert(repo);
-                },
+                }
                 Err(e) => {
                     error!("Failed to parse repo [{}]: {:?}", k, e);
-                },
+                }
             }
         }
 
@@ -297,8 +306,8 @@ impl GitsySettings {
                         });
                     }
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
         (settings, repo_descriptions)
     }
