@@ -6,11 +6,16 @@ use chrono::{
 use clap::Parser;
 use git2::{DiffOptions, Repository, Error};
 use serde::{Serialize, Deserialize};
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fs::File;
+use std::cmp;
+use std::fs::{File, create_dir, create_dir_all, read_dir, read_to_string};
+use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Instant;
 use tera::{Context, Filter, Function, Tera, Value, to_value, try_get_value};
 
 #[cfg(feature = "markdown")]
@@ -472,7 +477,7 @@ fn parse_commit(repo: &Repository, refr: &str) -> Result<GitObject, Error> {
         deletions: stats.deletions(),
         ..Default::default()
     };
-    let files: std::rc::Rc<std::cell::RefCell<Vec<GitDiffFile>>> = std::rc::Rc::new(std::cell::RefCell::new(vec!()));
+    let files: Rc<RefCell<Vec<GitDiffFile>>> = Rc::new(RefCell::new(vec!()));
 
     diff.foreach(
         &mut |file, _progress| {
@@ -528,7 +533,7 @@ fn parse_commit(repo: &Repository, refr: &str) -> Result<GitObject, Error> {
         })
     )?;
 
-    match std::rc::Rc::try_unwrap(files) {
+    match Rc::try_unwrap(files) {
         Ok(files) => {
             let files: Vec<GitDiffFile> = files.into_inner();
             commit_diff.files = files;
@@ -817,11 +822,11 @@ macro_rules! output_path_fn {
             path.push(tmpl);
             match $is_dir {
                 true => {
-                    let _ = std::fs::create_dir_all(&path);
+                    let _ = create_dir_all(&path);
                 },
                 false => {
                     if let Some(dir) = path.parent() {
-                        let _ = std::fs::create_dir_all(dir);
+                        let _ = create_dir_all(dir);
                     }
                 },
             }
@@ -868,7 +873,6 @@ struct GitsySettingsRepo {
     limit_total_size: Option<usize>,
 }
 
-use std::hash::{Hash, Hasher};
 impl Hash for GitsySettingsRepo {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.path.hash(state);
@@ -891,7 +895,7 @@ fn write_rendered(path: &str, rendered: &str) -> usize {
 }
 
 fn main() {
-    let start_all = std::time::Instant::now();
+    let start_all = Instant::now();
     let cli = CliArgs::parse();
     let config_path = cli.config.as_deref().unwrap_or(Path::new("config.toml")).to_owned();
     let config_dir = config_path.parent().expect("Config file not in valid directory.").to_owned();
@@ -913,7 +917,7 @@ fn main() {
     }, Ordering::Relaxed);
 
     // Parse the known settings directly into their struct
-    let toml = std::fs::read_to_string(&config_path).expect(&format!("Configuration file not found: {}", config_path.display()));
+    let toml = read_to_string(&config_path).expect(&format!("Configuration file not found: {}", config_path.display()));
     let settings: GitsySettings = toml::from_str(&toml).expect("Configuration file is invalid.");
 
     // Settings are valid, so let's move into the directory with the config file
@@ -937,7 +941,7 @@ fn main() {
     // Try to convert each unknown "table" into a repo struct, and
     // save the ones that are successful.  If no repo name is
     // specified, use the TOML table name.
-    let mut repo_descriptions: std::collections::HashSet<GitsySettingsRepo> = HashSet::new();
+    let mut repo_descriptions: HashSet<GitsySettingsRepo> = HashSet::new();
     for k in &table_keys {
         let v = settings_raw.get(k).unwrap();
         match toml::from_str::<GitsySettingsRepo>(&v.to_string()) {
@@ -956,7 +960,7 @@ fn main() {
     match &settings.recursive_repo_dirs {
         Some(dirs) => {
             for parent in dirs {
-                for dir in std::fs::read_dir(parent).expect("Repo directory not found.") {
+                for dir in read_dir(parent).expect("Repo directory not found.") {
                     let dir = dir.expect("Repo contains invalid entries");
                     let name: String = dir.file_name().to_string_lossy().to_string();
                     repo_descriptions.insert(GitsySettingsRepo {
@@ -988,7 +992,7 @@ fn main() {
         Ok(t) => t,
         Err(e) => {
             error!("Parsing error(s): {}", e);
-            ::std::process::exit(1);
+            std::process::exit(1);
         }
     };
     tera.register_filter("only_files", FileFilter{});
@@ -1008,7 +1012,7 @@ fn main() {
     }
 
     // Create output directory
-    let _ = std::fs::create_dir(settings.outputs.path.to_str().expect("Output path invalid."));
+    let _ = create_dir(settings.outputs.path.to_str().expect("Output path invalid."));
 
     let generated_dt = chrono::offset::Local::now();
     let mut global_bytes = 0;
@@ -1023,11 +1027,11 @@ fn main() {
     // Sort the repositories by name
     let mut repo_vec: Vec<GitsySettingsRepo> = repo_descriptions.drain().collect();
     repo_vec.sort_by(|x,y| x.name.as_deref().map(|n| n.cmp(&y.name.as_deref().unwrap_or_default()))
-                     .unwrap_or(std::cmp::Ordering::Equal));
+                     .unwrap_or(cmp::Ordering::Equal));
     // Find the one with the longest name, for pretty printing
     let global_name = "repo list";
     let longest_repo_name = repo_vec.iter().fold(0, |acc, x| {
-        std::cmp::max(acc, x.name.as_deref().map(|n| n.len()).unwrap_or(0))
+        cmp::max(acc, x.name.as_deref().map(|n| n.len()).unwrap_or(0))
     }).max(global_name.len());
 
     loudest!("Global settings:\n{:#?}", &settings);
@@ -1035,7 +1039,7 @@ fn main() {
     // Iterate over each repository, generating outputs
     for repo_desc in &repo_vec {
         loudest!("Repo settings:\n{:#?}", &repo_desc);
-        let start_repo = std::time::Instant::now();
+        let start_repo = Instant::now();
         let mut repo_bytes = 0;
         let name = repo_desc.name.as_deref().expect("A configured repository has no name!");
 
@@ -1286,7 +1290,7 @@ fn main() {
         size_check!(repo_desc, repo_bytes, total_bytes);
     }
 
-    let start_global = std::time::Instant::now();
+    let start_global = Instant::now();
     normal_noln!("[{}{}]... ", global_name, " ".repeat(longest_repo_name - global_name.len()));
     let mut global_ctx = Context::new();
     global_ctx.try_insert("repos", &repos).expect("Failed to add repo to template engine.");
