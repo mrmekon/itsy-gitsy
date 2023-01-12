@@ -65,9 +65,6 @@ macro_rules! loudest {
 // TODO:
 //
 //   * pagination
-//   * remote repositories
-//   * extra metadata for recursive repo listings?
-//   * all relative paths should be relative to settings.toml
 //   * basic, light, dark, and fancy default themes
 //   * split into modules
 //   * parallelize output generation
@@ -897,14 +894,21 @@ fn main() {
     let start_all = std::time::Instant::now();
     let cli = CliArgs::parse();
     let config_path = cli.config.as_deref().unwrap_or(Path::new("config.toml"));
+    let config_dir = config_path.parent().expect("Config file not in valid directory.").to_owned();
     VERBOSITY.store(match cli.quiet {
         true => 0,
         false => (cli.verbose + 1).into(),
     }, Ordering::Relaxed);
 
     // Parse the known settings directly into their struct
-    let toml = std::fs::read_to_string(config_path).expect(&format!("Configuration file not found: {}", config_path.display()));
+    let toml = std::fs::read_to_string(&config_path).expect(&format!("Configuration file not found: {}", config_path.display()));
     let settings: GitsySettings = toml::from_str(&toml).expect("Configuration file is invalid.");
+
+    // Settings are valid, so let's move into the directory with the config file
+    if config_dir.to_str().unwrap_or_default().len() > 0 { // empty string means current directory
+        std::env::set_current_dir(&config_dir)
+            .expect(&format!("Unable to set working directory to: {}", config_dir.display()));
+    }
 
     // Get a list of all remaining TOML "tables" in the file.
     // These are the user-supplied individual repositories.
