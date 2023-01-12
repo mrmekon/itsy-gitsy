@@ -9,7 +9,6 @@ use settings::{GitsyCli, GitsySettings};
 
 // TODO:
 //
-//   * pagination
 //   * basic, light, dark, and fancy default themes
 //   * better error propagation
 //   * automated tests

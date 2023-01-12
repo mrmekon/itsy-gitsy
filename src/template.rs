@@ -1,6 +1,8 @@
 use crate::git::GitFile;
 use chrono::{naive::NaiveDateTime, offset::FixedOffset, DateTime};
+use serde::Serialize;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use tera::{to_value, try_get_value, Filter, Function, Value};
 
 fn ts_to_date(ts: i64, offset: Option<i64>, format: Option<String>) -> String {
@@ -103,5 +105,99 @@ impl Function for TsTimestampFn {
             _ => None,
         };
         Ok(to_value(ts_to_git_timestamp(ts, tz)).unwrap())
+    }
+}
+
+#[derive(Serialize)]
+pub struct Pagination {
+    pub pages: usize,
+    pub page_idx: usize,
+    pub page_str: String,
+    pub cur_page: String,
+    pub next_page: Option<String>,
+    pub prev_page: Option<String>,
+}
+impl Pagination {
+    pub fn new(cur: usize, total: usize, url_template: &str) -> Self {
+        let digits = total.to_string().len().max(2);
+        let next = match cur + 1 <= total {
+            true => Some(cur + 1),
+            false => None,
+        };
+        let prev = match cur <= 1 {
+            true => None,
+            false => Some(cur - 1),
+        };
+        let cur_str = match cur <= 1 {
+            true => String::new(),
+            false => format!("{:0w$}", cur, w = digits),
+        };
+        let next_str = match next.unwrap_or(0) <= 1 {
+            true => String::new(),
+            false => format!("{:0w$}", next.unwrap_or(0), w = digits),
+        };
+        let prev_str = match prev.unwrap_or(0) <= 1 {
+            true => String::new(),
+            false => format!("{:0w$}", prev.unwrap_or(0), w = digits),
+        };
+        let cur_page = url_template.replace("%PAGE%", &cur_str);
+        let next_page = match next {
+            Some(_) => Some(url_template.replace("%PAGE%", &next_str)),
+            _ => None,
+        };
+        let prev_page = match prev {
+            Some(_) => Some(url_template.replace("%PAGE%", &prev_str)),
+            _ => None,
+        };
+        Pagination {
+            pages: total,
+            page_idx: cur,
+            page_str: cur_str.clone(),
+            cur_page,
+            next_page,
+            prev_page,
+        }
+    }
+
+    pub fn with_relative_paths(&self) -> Self {
+        let cur_page = {
+            let path = PathBuf::from(&self.cur_page);
+            path.file_name()
+                .expect(&format!("Invalid output filename: {}", self.cur_page))
+                .to_string_lossy()
+                .to_string()
+        };
+        let next_page = match &self.next_page {
+            Some(p) => {
+                let path = PathBuf::from(p);
+                Some(
+                    path.file_name()
+                        .expect(&format!("Invalid output filename: {}", p))
+                        .to_string_lossy()
+                        .to_string(),
+                )
+            }
+            _ => None,
+        };
+        let prev_page = match &self.prev_page {
+            Some(p) => {
+                let path = PathBuf::from(p);
+                Some(
+                    path.file_name()
+                        .expect(&format!("Invalid output filename: {}", p))
+                        .to_string_lossy()
+                        .to_string(),
+                )
+            }
+            _ => None,
+        };
+        Pagination {
+            pages: self.pages,
+            page_idx: self.page_idx,
+            page_str: self.page_str.clone(),
+            cur_page,
+            next_page,
+            prev_page,
+        }
     }
 }

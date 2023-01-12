@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 
 {% block content %}
+<a href="history.html">Commit history</a><br>
+<a href="branches.html">All branches</a><br>
+<a href="tags.html">All tags</a><br>
+<br/>
 <table class="commits">
   <tr>
     <th>Commit ID</th>
@@ -11,7 +15,7 @@
     <th>Refs</th>
   </tr>
   {% for entry in history -%}
-  {% if loop.index0 < 250  -%}
+  {% if loop.index0 < 10  -%}
                       <tr class="commit">
                         <td class="oid"><a href="commit/{{entry.full_hash}}.html">{{entry.short_hash}}</a></td>
                         <td class="commit-msg" style="font-family: sans-serif;">{{entry.summary}}</td>
@@ -33,6 +37,7 @@
     <th>Date</th>
   </tr>
   {% for entry in branches -%}
+  {% if loop.index0 < 10  -%}
   <tr class="branch">
     <td class="name"><a href="branch/{{entry.full_hash}}.html">{{entry.ref_name}}</a></td>
     <td class="oid">{{entry.short_hash}}</td>
@@ -40,6 +45,7 @@
     <td class="author">{{entry.author.name}}</td>
     <td class="date">{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}</td>
   </tr>
+  {% endif -%}
   {% endfor -%}
 </table>
 
@@ -52,6 +58,7 @@
     <th>Date</th>
   </tr>
   {% for entry in tags -%}
+  {% if loop.index0 < 10  -%}
   <tr class="tag">
     <td class="name"><a href="tag/{{entry.full_hash}}.html">{{entry.ref_name}}</a></td>
     <td class="oid">{{entry.short_hash}}</td>
@@ -59,6 +66,7 @@
     <td class="author">{{entry.author.name}}</td>
     <td class="date">{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}</td>
   </tr>
+  {% endif -%}
   {% endfor -%}
 </table>
 

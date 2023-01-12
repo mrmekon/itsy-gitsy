@@ -3,7 +3,7 @@ use crate::{
     git::{dir_listing, parse_repo, GitFile, GitRepo, GitsyMetadata},
     loud, louder, loudest, normal, normal_noln,
     settings::{GitsyCli, GitsyRepoDescriptions, GitsySettings, GitsySettingsRepo},
-    template::{DirFilter, FileFilter, TsDateFn, TsTimestampFn},
+    template::{DirFilter, FileFilter, Pagination, TsDateFn, TsTimestampFn},
     util::GitsyError,
 };
 use git2::{Error, Repository};
@@ -316,6 +316,31 @@ impl GitsyGenerator {
                 }
             }
 
+            if let Some(templ_file) = self.settings.templates.branches.as_deref() {
+                let mut paged_ctx = local_ctx.clone();
+                paged_ctx.remove("branches");
+                let pages = summary
+                    .branches
+                    .chunks(self.settings.paginate_branches());
+                let page_count = pages.len();
+                for (idx, page) in pages.enumerate() {
+                    let pagination =
+                        Pagination::new(idx + 1, page_count, &self.settings.outputs.branches(Some(&summary), None));
+                    paged_ctx.insert("page", &pagination.with_relative_paths());
+                    paged_ctx.insert("branches", &page);
+                    match tera.render(templ_file, &paged_ctx) {
+                        Ok(rendered) => {
+                            repo_bytes += GitsyGenerator::write_rendered(&pagination.cur_page, &rendered);
+                        }
+                        Err(x) => match x.kind {
+                            _ => error!("ERROR: {:?}", x),
+                        },
+                    }
+                    paged_ctx.remove("page");
+                    paged_ctx.remove("branches");
+                }
+            }
+
             for branch in &summary.branches {
                 size_check!(repo_desc, repo_bytes, total_bytes, break);
                 local_ctx.insert("branch", branch);
@@ -333,6 +358,31 @@ impl GitsyGenerator {
                     }
                 }
                 local_ctx.remove("branch");
+            }
+
+            if let Some(templ_file) = self.settings.templates.tags.as_deref() {
+                let mut paged_ctx = local_ctx.clone();
+                paged_ctx.remove("tags");
+                let pages = summary
+                    .tags
+                    .chunks(self.settings.paginate_tags());
+                let page_count = pages.len();
+                for (idx, page) in pages.enumerate() {
+                    let pagination =
+                        Pagination::new(idx + 1, page_count, &self.settings.outputs.tags(Some(&summary), None));
+                    paged_ctx.insert("page", &pagination.with_relative_paths());
+                    paged_ctx.insert("tags", &page);
+                    match tera.render(templ_file, &paged_ctx) {
+                        Ok(rendered) => {
+                            repo_bytes += GitsyGenerator::write_rendered(&pagination.cur_page, &rendered);
+                        }
+                        Err(x) => match x.kind {
+                            _ => error!("ERROR: {:?}", x),
+                        },
+                    }
+                    paged_ctx.remove("page");
+                    paged_ctx.remove("tags");
+                }
             }
 
             for tag in &summary.tags {
@@ -358,6 +408,31 @@ impl GitsyGenerator {
                 }
                 local_ctx.remove("tag");
                 local_ctx.remove("commit");
+            }
+
+            if let Some(templ_file) = self.settings.templates.history.as_deref() {
+                let mut paged_ctx = local_ctx.clone();
+                paged_ctx.remove("history");
+                let pages = summary
+                    .history
+                    .chunks(self.settings.paginate_history());
+                let page_count = pages.len();
+                for (idx, page) in pages.enumerate() {
+                    let pagination =
+                        Pagination::new(idx + 1, page_count, &self.settings.outputs.history(Some(&summary), None));
+                    paged_ctx.insert("page", &pagination.with_relative_paths());
+                    paged_ctx.insert("history", &page);
+                    match tera.render(templ_file, &paged_ctx) {
+                        Ok(rendered) => {
+                            repo_bytes += GitsyGenerator::write_rendered(&pagination.cur_page, &rendered);
+                        }
+                        Err(x) => match x.kind {
+                            _ => error!("ERROR: {:?}", x),
+                        },
+                    }
+                    paged_ctx.remove("page");
+                    paged_ctx.remove("history");
+                }
             }
 
             for (_id, commit) in &summary.commits {

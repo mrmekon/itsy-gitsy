@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+<table class="commits">
+  <tr>
+    <th>Commit ID</th>
+    <th>Message</th>
+    <th>Author</th>
+    <th>Date</th>
+    <th>Diff</th>
+    <th>Refs</th>
+  </tr>
+  {% for entry in history -%}
+  {% if loop.index0 < 250  -%}
+                      <tr class="commit">
+                        <td class="oid"><a href="commit/{{entry.full_hash}}.html">{{entry.short_hash}}</a></td>
+                        <td class="commit-msg" style="font-family: sans-serif;">{{entry.summary}}</td>
+                        <td class="author" style="font-family: sans-serif;">{{entry.author.name}}</td>
+                        <td class="date">{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}</td>
+                        <td class="diff">{{entry.stats.files}} (+{{entry.stats.additions}}/-{{entry.stats.deletions}})</td>
+                        <td class="refs">{%- for ref in entry.alt_refs -%}{%- if loop.index0 > 0 -%},&nbsp; {%- endif -%}<span class="commit-ref">{{ref}}</span>{%- endfor -%}</td>
+</tr>
+{% endif -%}
+{% endfor -%}
+</table>
+{% if page.prev_page %}<a href="{{ page.prev_page }}">PREV</a>{% endif %} &nbsp; &nbsp; &nbsp; <a href="{{ page.cur_page }}">CUR</a> &nbsp; &nbsp; &nbsp; {%if page.next_page %}<a href="{{ page.next_page }}">NEXT</a>{% endif %}<br>
+{% endblock content %}

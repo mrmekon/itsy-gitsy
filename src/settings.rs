@@ -70,8 +70,11 @@ pub struct GitsySettingsTemplates {
     pub path: PathBuf,
     pub repo_list: Option<String>,
     pub repo_summary: Option<String>,
+    pub history: Option<String>,
     pub commit: Option<String>,
+    pub branches: Option<String>,
     pub branch: Option<String>,
+    pub tags: Option<String>,
     pub tag: Option<String>,
     pub file: Option<String>,
     pub dir: Option<String>,
@@ -84,8 +87,11 @@ pub struct GitsySettingsOutputs {
     pub cloned_repos: Option<String>,
     pub repo_list: Option<String>,
     pub repo_summary: Option<String>,
+    pub history: Option<String>,
     pub commit: Option<String>,
+    pub branches: Option<String>,
     pub branch: Option<String>,
+    pub tags: Option<String>,
     pub tag: Option<String>,
     pub file: Option<String>,
     pub dir: Option<String>,
@@ -140,18 +146,22 @@ macro_rules! output_path_fn {
 }
 //step_map_first!(boil_in_wort, Boil, Wort, |b: &Boil| { b.wort_start() });
 
+#[rustfmt::skip]
 impl GitsySettingsOutputs {
-    output_path_fn!(repo_list, GitObject, full_hash, false, "repos.html");
-    output_path_fn!(repo_summary, GitObject, full_hash, false, "%REPO%/summary.html");
-    output_path_fn!(commit, GitObject, full_hash, false, "%REPO%/commit/%ID%.html");
-    output_path_fn!(branch, GitObject, full_hash, false, "%REPO%/branch/%ID%.html");
-    output_path_fn!(tag, GitObject, full_hash, false, "%REPO%/tag/%ID%.html");
-    output_path_fn!(file, GitFile, id, false, "%REPO%/file/%ID%.html");
-    output_path_fn!(syntax_css, GitObject, full_hash, false, "%REPO%/file/syntax.css");
-    output_path_fn!(dir, GitFile, id, false, "%REPO%/dir/%ID%.html");
-    output_path_fn!(error, GitObject, full_hash, false, "404.html");
-    output_path_fn!(global_assets, GitObject, full_hash, true, "assets/");
-    output_path_fn!(repo_assets, GitObject, full_hash, true, "%REPO%/assets/");
+    output_path_fn!(repo_list,       GitObject, full_hash, false, "repos.html");
+    output_path_fn!(repo_summary,    GitObject, full_hash, false, "%REPO%/summary.html");
+    output_path_fn!(history,         GitObject, full_hash, false, "%REPO%/history%PAGE%.html");
+    output_path_fn!(commit,          GitObject, full_hash, false, "%REPO%/commit/%ID%.html");
+    output_path_fn!(branches,        GitObject, full_hash, false, "%REPO%/branches%PAGE%.html");
+    output_path_fn!(branch,          GitObject, full_hash, false, "%REPO%/branch/%ID%.html");
+    output_path_fn!(tags,            GitObject, full_hash, false, "%REPO%/tags%PAGE%.html");
+    output_path_fn!(tag,             GitObject, full_hash, false, "%REPO%/tag/%ID%.html");
+    output_path_fn!(file,            GitFile,   id,        false, "%REPO%/file/%ID%.html");
+    output_path_fn!(syntax_css,      GitObject, full_hash, false, "%REPO%/file/syntax.css");
+    output_path_fn!(dir,             GitFile,   id,        false, "%REPO%/dir/%ID%.html");
+    output_path_fn!(error,           GitObject, full_hash, false, "404.html");
+    output_path_fn!(global_assets,   GitObject, full_hash, true,  "assets/");
+    output_path_fn!(repo_assets,     GitObject, full_hash, true,  "%REPO%/assets/");
 }
 
 #[derive(Clone, Deserialize, Default, Debug)]
@@ -165,6 +175,9 @@ pub struct GitsySettingsRepo {
     pub syntax_highlight: Option<bool>,
     pub syntax_highlight_theme: Option<String>,
     pub attributes: Option<BTreeMap<String, toml::Value>>,
+    pub paginate_history: Option<usize>,
+    pub paginate_branches: Option<usize>,
+    pub paginate_tags: Option<usize>,
     pub limit_history: Option<usize>,
     pub limit_commits: Option<usize>,
     pub limit_branches: Option<usize>,
@@ -201,6 +214,9 @@ pub struct GitsySettings {
     pub templates: GitsySettingsTemplates,
     #[serde(rename(deserialize = "gitsy_outputs"))]
     pub outputs: GitsySettingsOutputs,
+    pub paginate_history: Option<usize>,
+    pub paginate_branches: Option<usize>,
+    pub paginate_tags: Option<usize>,
     pub limit_history: Option<usize>,
     pub limit_commits: Option<usize>,
     pub limit_branches: Option<usize>,
@@ -265,6 +281,9 @@ impl GitsySettings {
                     global_to_repo!(settings, repo, render_markdown);
                     global_to_repo!(settings, repo, syntax_highlight);
                     global_to_repo!(settings, repo, syntax_highlight_theme);
+                    global_to_repo!(settings, repo, paginate_history);
+                    global_to_repo!(settings, repo, paginate_branches);
+                    global_to_repo!(settings, repo, paginate_tags);
                     global_to_repo!(settings, repo, limit_history);
                     global_to_repo!(settings, repo, limit_commits);
                     global_to_repo!(settings, repo, limit_branches);
@@ -294,6 +313,9 @@ impl GitsySettings {
                             render_markdown: settings.render_markdown.clone(),
                             syntax_highlight: settings.syntax_highlight.clone(),
                             syntax_highlight_theme: settings.syntax_highlight_theme.clone(),
+                            paginate_history: settings.paginate_history.clone(),
+                            paginate_branches: settings.paginate_branches.clone(),
+                            paginate_tags: settings.paginate_tags.clone(),
                             limit_history: settings.limit_history.clone(),
                             limit_commits: settings.limit_commits.clone(),
                             limit_branches: settings.limit_branches.clone(),
@@ -310,5 +332,26 @@ impl GitsySettings {
             _ => {}
         }
         (settings, repo_descriptions)
+    }
+
+    pub fn paginate_history(&self) -> usize {
+        match self.paginate_history.unwrap_or(usize::MAX) {
+            x if x == 0 => usize::MAX,
+            x => x,
+        }
+    }
+
+    pub fn paginate_branches(&self) -> usize {
+        match self.paginate_branches.unwrap_or(usize::MAX) {
+            x if x == 0 => usize::MAX,
+            x => x,
+        }
+    }
+
+    pub fn paginate_tags(&self) -> usize {
+        match self.paginate_tags.unwrap_or(usize::MAX) {
+            x if x == 0 => usize::MAX,
+            x => x,
+        }
     }
 }

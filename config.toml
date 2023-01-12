@@ -46,6 +46,48 @@
 # directory is used.
 #asset_files = []
 
+# Whether to split history output into pages
+#
+# If non-zero and a `history` template is specified, the history
+# output is generated several times, each with the `history` variable
+# in the template engine containing the next `paginate_history` number
+# of entries.
+#
+# A `page` variable is available in the template, which contains the
+# current, next, previous, and total number of pages.
+#
+# Use the "%PAGE%" variable in the `history` output variable to
+# substitute the page number into the produced filename.
+paginate_history = 50
+
+# Whether to split branches output into pages
+#
+# If non-zero and a `branches` template is specified, the branches
+# output is generated several times, each with the `branches` variable
+# in the template engine containing the next `paginate_branches`
+# number of entries.
+#
+# A `page` variable is available in the template, which contains the
+# current, next, previous, and total number of pages.
+#
+# Use the "%PAGE%" variable in the `branches` output variable to
+# substitute the page number into the produced filename.
+paginate_branches = 50
+
+# Whether to split tags output into pages
+#
+# If non-zero and a `tags` template is specified, the tags output is
+# generated several times, each with the `tags` variable in the
+# template engine containing the next `paginate_tags` number of
+# entries.
+#
+# A `page` variable is available in the template, which contains the
+# current, next, previous, and total number of pages.
+#
+# Use the "%PAGE%" variable in the `tags` output variable to
+# substitute the page number into the produced filename.
+paginate_tags = 50
+
 # Whether to render Markdown files in repos into HTML.
 #
 # Rendering Markdown can make site generation take more time.  It has potential
@@ -215,6 +257,18 @@ repo_list    = "repos.html"
 # This template executes one time per repository.
 repo_summary = "summary.html"
 
+# Template responsible for displaying the commit history.
+#
+# This template is evaluated with the same data as `repo_summary`.  If
+# the `paginate_history` setting is non-zero, this may be called
+# several times with the `history` template variable reduced to the
+# requested page size, and with a `page` template variable provided to
+# identify the current, previous, and next pages.
+#
+# This template executes at least one time per repository, or several
+# times if paginated.
+history      = "history.html"
+
 # Template responsible for displaying a single commit.
 #
 # Called once per parsed commit, with both the whole repository and the current
@@ -223,6 +277,18 @@ repo_summary = "summary.html"
 # This template executes many times.
 commit       = "commit.html"
 
+# Template responsible for displaying the repo branches.
+#
+# This template is evaluated with the same data as `repo_summary`.  If
+# the `paginate_branches` setting is non-zero, this may be called
+# several times with the `branches` template variable reduced to the
+# requested page size, and with a `page` template variable provided to
+# identify the current, previous, and next pages.
+#
+# This template executes at least one time per repository, or several
+# times if paginated.
+branches     = "branches.html"
+
 # Template responsible for displaying a single branch.
 #
 # Called once per parsed branch, with both the whole repository and the current
@@ -230,6 +296,18 @@ commit       = "commit.html"
 #
 # This template executes many times.
 branch       = "branch.html"
+
+# Template responsible for displaying the repo tags.
+#
+# This template is evaluated with the same data as `repo_summary`.  If
+# the `paginate_tags` setting is non-zero, this may be called several
+# times with the `tags` template variable reduced to the requested
+# page size, and with a `page` template variable provided to identify
+# the current, previous, and next pages.
+#
+# This template executes at least one time per repository, or several
+# times if paginated.
+tags         = "tags.html"
 
 # Template responsible for displaying a single tag.
 #
@@ -279,6 +357,7 @@ error        = "404.html"
 ##
 ## * "%REPO%" -- replaced with the name of the currently processing repository
 ## * "%ID%" -- replaced with the ID of the currently processing object
+## * "%PAGE%" -- replaced with the current page number if output is paginated
 ##
 ## All except `path` are optional.  If not specified, sensible defaults will be
 ## used.
@@ -288,8 +367,11 @@ error        = "404.html"
 path = "rendered/"
 repo_list     = "repos.html"
 repo_summary  = "%REPO%/summary.html"
+history       = "%REPO%/history%PAGE%.html"
 commit        = "%REPO%/commit/%ID%.html"
+branches      = "%REPO%/branches%PAGE%.html"
 branch        = "%REPO%/branch/%ID%.html"
+tags          = "%REPO%/tags%PAGE%.html"
 tag           = "%REPO%/tag/%ID%.html"
 file          = "%REPO%/file/%ID%.html"
 syntax_css    = "%REPO%/file/syntax.css"
@@ -366,18 +448,21 @@ generated_by = "Itsy-Gitsy"
 
 # Per-repository settings, same as the global versions described above:
 
-#render_markdown = false
-#syntax_highlighting = false
+#render_markdown        = false
+#syntax_highlighting    = false
 #syntax_highlight_theme = "base16-ocean.dark"
-#limit_history    = 500
-#limit_commits    = 500
-#limit_branches   = 500
-#limit_tags       = 500
-#limit_tree_depth = 20
-#limit_file_size  = 2097152
-#limit_repo_size  = 52428800
-#limit_total_size = 524288000
-#asset_files = ["LICENSE"]
+#paginate_history       = 50
+#paginate_branches      = 50
+#paginate_tags          = 50
+#limit_history          = 500
+#limit_commits          = 500
+#limit_branches         = 500
+#limit_tags             = 500
+#limit_tree_depth       = 20
+#limit_file_size        = 2097152
+#limit_repo_size        = 52428800
+#limit_total_size       = 524288000
+#asset_files            = ["LICENSE"]
 
 # An alternative way to specify the user-defined attributes.
 #
