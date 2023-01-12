@@ -253,6 +253,19 @@ fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, metad
     let mut branch_count = 0;
     let mut tag_count = 0;
 
+    // Cache the shortnames of all references
+    let mut references: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for refr in repo.references()? {
+        let refr = refr?;
+        if let (Some(target), Some(name)) = (refr.target(), refr.shorthand()) {
+            let id = target.to_string();
+            match references.contains_key(&id) {
+                false => { references.insert(target.to_string(), vec!(name.to_string())); },
+                true => { references.get_mut(&id).unwrap().push(name.to_string()); },
+            }
+        }
+    }
+
     loud!();
     let mut revwalk = repo.revwalk()?;
     revwalk.set_sorting(git2::Sort::TOPOLOGICAL)?;
@@ -289,21 +302,8 @@ fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, metad
             deletions: stats.deletions(),
         };
 
-        // TODO: is it acceptable to iterate over all references for
-        // every commit?  Is there another way?  Should probably cache
-        // all of the ref IDs in memory.
-        let mut alt_refs = vec!();
-        for refr in repo.references()? {
-            let refr = refr?;
-            if let Some(target) = refr.target() {
-                if target == commit.id() {
-                    // TODO: save these
-                    if let Some(name) = refr.shorthand() {
-                        alt_refs.push(name.to_string());
-                    }
-                }
-            }
-        }
+        let alt_refs: Vec<String> = references.get(&commit.id().to_string())
+            .map(|x| x.to_owned()).unwrap_or_default();
 
         if history_count < settings.limit_history.unwrap_or(usize::MAX) {
             loudest!("   + {} {}", full_hash, first_line(commit.message_bytes()));
