@@ -384,9 +384,22 @@ fn parse_repo(repo: &Repository, name: &str, settings: &GitsySettingsRepo, metad
         }
         let tag = tag.unwrap_or("[unnamed]");
         let obj = repo.revparse_single(tag)?;
-        let commit = repo.find_tag(obj.id())?;
         let full_hash = obj.id().to_string();
         let short_hash = obj.short_id()?.as_str().unwrap_or_default().to_string();
+        let commit = match repo.find_tag(obj.id()) {
+            Ok(c) => c,
+            Err(_e) => {
+                error!("WARNING: tag commit not found for tag: {}", obj.id().to_string());
+                tags.push(GitObject {
+                    full_hash,
+                    short_hash,
+                    ref_name: Some(tag.to_string()),
+                    ..Default::default()
+                });
+                tag_count += 1;
+                continue;
+            }
+        };
         let (ts, tz) = match commit.tagger() {
             Some(t) => (t.when().seconds(), (t.when().offset_minutes() as i64) * 60),
             _ => (0, 0),
@@ -1189,8 +1202,10 @@ fn main() {
         for tag in &summary.tags {
             size_check!(repo_desc, repo_bytes, total_bytes);
             local_ctx.insert("tag", tag);
-            if let Some(commit) = summary.commits.get(tag.tagged_id.as_ref().unwrap()) {
-                local_ctx.insert("commit", &commit);
+            if let Some(tagged_id) = tag.tagged_id.as_ref() {
+                if let Some(commit) = summary.commits.get(tagged_id) {
+                    local_ctx.insert("commit", &commit);
+                }
             }
             if let Some(templ_file) = settings.templates.tag.as_deref() {
                 match tera.render(templ_file, &local_ctx) {
