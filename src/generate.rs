@@ -132,8 +132,9 @@ impl GitsyGenerator {
             self.settings.outputs.path.display()
         ));
         let canonical_path = PathBuf::from(path);
-        let has_relative_dirs = canonical_path.ancestors().any(|x| x.file_name().is_none() &&
-                                                               x != Path::new("/"));
+        let has_relative_dirs = canonical_path
+            .ancestors()
+            .any(|x| x.file_name().is_none() && x != Path::new("/"));
         assert!(
             canonical_path.is_absolute(),
             "ERROR: write_rendered called with a relative path: {}",
@@ -347,13 +348,14 @@ impl GitsyGenerator {
             if let Some(templ_file) = self.settings.templates.branches.as_deref() {
                 let mut paged_ctx = local_ctx.clone();
                 paged_ctx.remove("branches");
-                let pages = summary
-                    .branches
-                    .chunks(self.settings.paginate_branches());
+                let pages = summary.branches.chunks(self.settings.paginate_branches());
                 let page_count = pages.len();
                 for (idx, page) in pages.enumerate() {
-                    let pagination =
-                        Pagination::new(idx + 1, page_count, &self.settings.outputs.branches(Some(&summary), None));
+                    let pagination = Pagination::new(
+                        idx + 1,
+                        page_count,
+                        &self.settings.outputs.branches(Some(&summary), None),
+                    );
                     paged_ctx.insert("page", &pagination.with_relative_paths());
                     paged_ctx.insert("branches", &page);
                     match tera.render(templ_file, &paged_ctx) {
@@ -389,9 +391,7 @@ impl GitsyGenerator {
             if let Some(templ_file) = self.settings.templates.tags.as_deref() {
                 let mut paged_ctx = local_ctx.clone();
                 paged_ctx.remove("tags");
-                let pages = summary
-                    .tags
-                    .chunks(self.settings.paginate_tags());
+                let pages = summary.tags.chunks(self.settings.paginate_tags());
                 let page_count = pages.len();
                 for (idx, page) in pages.enumerate() {
                     let pagination =
@@ -437,13 +437,14 @@ impl GitsyGenerator {
             if let Some(templ_file) = self.settings.templates.history.as_deref() {
                 let mut paged_ctx = local_ctx.clone();
                 paged_ctx.remove("history");
-                let pages = summary
-                    .history
-                    .chunks(self.settings.paginate_history());
+                let pages = summary.history.chunks(self.settings.paginate_history());
                 let page_count = pages.len();
                 for (idx, page) in pages.enumerate() {
-                    let pagination =
-                        Pagination::new(idx + 1, page_count, &self.settings.outputs.history(Some(&summary), None));
+                    let pagination = Pagination::new(
+                        idx + 1,
+                        page_count,
+                        &self.settings.outputs.history(Some(&summary), None),
+                    );
                     paged_ctx.insert("page", &pagination.with_relative_paths());
                     paged_ctx.insert("history", &page);
                     match tera.render(templ_file, &paged_ctx) {

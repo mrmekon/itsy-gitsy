@@ -126,8 +126,10 @@ macro_rules! output_path_fn {
                 _ => tmpl_str,
             };
             let tmpl = PathBuf::from(tmpl_str);
-            let mut path = self.path.clone().canonicalize()
-                .expect(&format!("ERROR: unable to canonicalize output path: {}", self.path.display()));
+            let mut path = self.path.clone().canonicalize().expect(&format!(
+                "ERROR: unable to canonicalize output path: {}",
+                self.path.display()
+            ));
             path.push(tmpl);
             match $is_dir {
                 true => {
