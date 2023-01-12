@@ -5,6 +5,7 @@ use chrono::{
 };
 use clap::Parser;
 use git2::{DiffOptions, Repository, Error};
+use rayon::prelude::*;
 use serde::{Serialize, Deserialize};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -1029,12 +1030,14 @@ fn main() {
     tera.register_function("ts_to_git_timestamp", TsTimestampFn{});
 
     macro_rules! size_check {
-        ($settings:ident, $cur:ident, $total:expr) => {
-            if $cur > $settings.limit_repo_size.unwrap_or(usize::MAX) {
-                break;
+        ($settings:ident, $cur:expr, $total:expr, $action:expr) => {
+            let cur: usize = $cur;
+            if cur > $settings.limit_repo_size.unwrap_or(usize::MAX) {
+                $action;
             }
-            if $total + $cur > $settings.limit_total_size.unwrap_or(usize::MAX) {
-                break;
+            let total: usize = $total;
+            if total.saturating_add($cur) > $settings.limit_total_size.unwrap_or(usize::MAX) {
+                $action;
             }
         }
     }
@@ -1184,7 +1187,7 @@ fn main() {
         }
 
         for branch in &summary.branches {
-            size_check!(repo_desc, repo_bytes, total_bytes);
+            size_check!(repo_desc, repo_bytes, total_bytes, break);
             local_ctx.insert("branch", branch);
             if let Some(templ_file) = settings.templates.branch.as_deref() {
                 match tera.render(templ_file, &local_ctx) {
@@ -1200,7 +1203,7 @@ fn main() {
         }
 
         for tag in &summary.tags {
-            size_check!(repo_desc, repo_bytes, total_bytes);
+            size_check!(repo_desc, repo_bytes, total_bytes, break);
             local_ctx.insert("tag", tag);
             if let Some(tagged_id) = tag.tagged_id.as_ref() {
                 if let Some(commit) = summary.commits.get(tagged_id) {
@@ -1222,7 +1225,7 @@ fn main() {
         }
 
         for (_id, commit) in &summary.commits {
-            size_check!(repo_desc, repo_bytes, total_bytes);
+            size_check!(repo_desc, repo_bytes, total_bytes, break);
             local_ctx.try_insert("commit", &commit).expect("Failed to add commit to template engine.");
             if let Some(templ_file) = settings.templates.commit.as_deref() {
                 match tera.render(templ_file, &local_ctx) {
@@ -1237,11 +1240,6 @@ fn main() {
             local_ctx.remove("commit");
         }
 
-        // TODO: most of these generation blocks can be done in
-        // parallel.  This one is particularly costly, especially with
-        // markdown+highlighting, and would probably benefit from it.
-        // A potential drawback is that each parallel run needs a
-        // clone of the Tera context.
         #[cfg(any(feature = "highlight", feature = "highlight_fast"))]
         if settings.templates.file.is_some() {
             let ts = ThemeSet::load_defaults();
@@ -1252,17 +1250,29 @@ fn main() {
             repo_bytes += write_rendered(&settings.outputs.syntax_css(Some(&summary), None), css.as_str());
         }
 
-        for file in summary.all_files.iter().filter(|x| x.kind == "file") {
-            size_check!(repo_desc, repo_bytes, total_bytes);
+
+        // TODO: parallelize the rest of the processing steps.  This one is
+        // done first because syntax highlighting is very slow.
+        let files: Vec<&GitFile> = summary.all_files.iter().filter(|x| x.kind == "file").collect();
+        let atomic_bytes: AtomicUsize = AtomicUsize::new(repo_bytes);
+        let _ = files.par_iter().fold(|| Some(0), |acc, file| {
+            // These two have to be recreated.  Cloning the Tera context is expensive.
+            let repo = Repository::open(&repo_path).expect("Unable to find git repository.");
+            let mut local_ctx = local_ctx.clone();
+
+            let mut local_bytes = 0;
+            let cur_repo_bytes = atomic_bytes.load(Ordering::Relaxed);
+            size_check!(repo_desc, cur_repo_bytes, total_bytes, return None);
             let file = match file.size < repo_desc.limit_file_size.unwrap_or(usize::MAX) {
                 true => fill_file_contents(&repo, &file, &repo_desc).expect("Failed to parse file."),
-                false => file.clone(),
+                false => (*file).clone(),
             };
             local_ctx.try_insert("file", &file).expect("Failed to add file to template engine.");
             if let Some(templ_file) = settings.templates.file.as_deref() {
                 match tera.render(templ_file, &local_ctx) {
                     Ok(rendered) => {
-                        repo_bytes += write_rendered(&settings.outputs.file(Some(&summary), Some(&file)), &rendered);
+                        local_bytes = write_rendered(&settings.outputs.file(Some(&summary), Some(&file)), &rendered);
+                        atomic_bytes.fetch_add(local_bytes, Ordering::Relaxed);
                     },
                     Err(x) => match x.kind {
                         _ => error!("ERROR: {:?}", x),
@@ -1270,10 +1280,13 @@ fn main() {
                 }
             }
             local_ctx.remove("file");
-        }
+            Some(acc.unwrap() + local_bytes)})
+            .while_some() // allow short-circuiting if size limit is reached
+            .sum::<usize>();
+        repo_bytes = atomic_bytes.load(Ordering::Relaxed);
 
         for dir in summary.all_files.iter().filter(|x| x.kind == "dir") {
-            size_check!(repo_desc, repo_bytes, total_bytes);
+            size_check!(repo_desc, repo_bytes, total_bytes, break);
             if dir.tree_depth >= repo_desc.limit_tree_depth.unwrap_or(usize::MAX) - 1 {
                 continue;
             }
@@ -1317,7 +1330,7 @@ fn main() {
                 },
                 start_repo.elapsed().as_secs_f32(), repo_bytes);
         total_bytes += repo_bytes;
-        size_check!(repo_desc, repo_bytes, total_bytes);
+        size_check!(repo_desc, 0, total_bytes, break); // break if total is exceeded
     }
 
     let start_global = Instant::now();
