@@ -186,6 +186,9 @@ limit_total_size = 524288000
 ## template is a single file using the Tera template engine's format for text
 ## substitution.
 ##
+## All except `path` are optional.  If not specified, the associated outputs
+## will not be generated.
+##
 ###############################################################################
 [gitsy_templates]
 
@@ -276,6 +279,9 @@ error        = "404.html"
 ##
 ## * "%REPO%" -- replaced with the name of the currently processing repository
 ## * "%ID%" -- replaced with the ID of the currently processing object
+##
+## All except `path` are optional.  If not specified, sensible defaults will be
+## used.
 ##
 ###############################################################################
 [gitsy_outputs]

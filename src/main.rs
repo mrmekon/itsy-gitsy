@@ -820,11 +820,11 @@ macro_rules! output_path_fn {
             path.push(tmpl);
             match $is_dir {
                 true => {
-                    let _ = std::fs::create_dir(&path);
+                    let _ = std::fs::create_dir_all(&path);
                 },
                 false => {
                     if let Some(dir) = path.parent() {
-                        let _ = std::fs::create_dir(dir);
+                        let _ = std::fs::create_dir_all(dir);
                     }
                 },
             }
@@ -1119,27 +1119,29 @@ fn main() {
         local_ctx.insert("site_generated_ts", &generated_dt.timestamp());
         local_ctx.insert("site_generated_offset", &generated_dt.offset().local_minus_utc());
 
-        match tera.render(&settings.templates.repo_summary.as_deref().unwrap_or("summary.html"), &local_ctx) {
-            Ok(rendered) => {
-                repo_bytes += write_rendered(&settings.outputs.repo_summary(Some(&summary), None), &rendered);
-            },
-            Err(x) => match x.kind {
-                tera::ErrorKind::TemplateNotFound(_) if settings.templates.repo_summary.is_none() => {},
-                _ => error!("ERROR: {:?}", x),
-            },
+        if let Some(templ_file) = settings.templates.repo_summary.as_deref() {
+            match tera.render(templ_file, &local_ctx) {
+                Ok(rendered) => {
+                    repo_bytes += write_rendered(&settings.outputs.repo_summary(Some(&summary), None), &rendered);
+                },
+                Err(x) => match x.kind {
+                    _ => error!("ERROR: {:?}", x),
+                },
+            }
         }
 
         for branch in &summary.branches {
             size_check!(repo_desc, repo_bytes, total_bytes);
             local_ctx.insert("branch", branch);
-            match tera.render(&settings.templates.branch.as_deref().unwrap_or("branch.html"), &local_ctx) {
-                Ok(rendered) => {
-                    repo_bytes += write_rendered(&settings.outputs.branch(Some(&summary), Some(branch)), &rendered);
-                },
-                Err(x) => match x.kind {
-                    tera::ErrorKind::TemplateNotFound(_) if settings.templates.branch.is_none() => {},
-                    _ => error!("ERROR: {:?}", x),
-                },
+            if let Some(templ_file) = settings.templates.branch.as_deref() {
+                match tera.render(templ_file, &local_ctx) {
+                    Ok(rendered) => {
+                        repo_bytes += write_rendered(&settings.outputs.branch(Some(&summary), Some(branch)), &rendered);
+                    },
+                    Err(x) => match x.kind {
+                        _ => error!("ERROR: {:?}", x),
+                    },
+                }
             }
             local_ctx.remove("branch");
         }
@@ -1150,14 +1152,15 @@ fn main() {
             if let Some(commit) = summary.commits.get(tag.tagged_id.as_ref().unwrap()) {
                 local_ctx.insert("commit", &commit);
             }
-            match tera.render(&settings.templates.tag.as_deref().unwrap_or("tag.html"), &local_ctx) {
-                Ok(rendered) => {
-                    repo_bytes += write_rendered(&settings.outputs.tag(Some(&summary), Some(tag)), &rendered);
-                },
-                Err(x) => match x.kind {
-                    tera::ErrorKind::TemplateNotFound(_) if settings.templates.tag.is_none() => {},
-                    _ => error!("ERROR: {:?}", x),
-                },
+            if let Some(templ_file) = settings.templates.tag.as_deref() {
+                match tera.render(templ_file, &local_ctx) {
+                    Ok(rendered) => {
+                        repo_bytes += write_rendered(&settings.outputs.tag(Some(&summary), Some(tag)), &rendered);
+                    },
+                    Err(x) => match x.kind {
+                        _ => error!("ERROR: {:?}", x),
+                    },
+                }
             }
             local_ctx.remove("tag");
             local_ctx.remove("commit");
@@ -1166,14 +1169,15 @@ fn main() {
         for (_id, commit) in &summary.commits {
             size_check!(repo_desc, repo_bytes, total_bytes);
             local_ctx.try_insert("commit", &commit).expect("Failed to add commit to template engine.");
-            match tera.render(&settings.templates.commit.as_deref().unwrap_or("commit.html"), &local_ctx) {
-                Ok(rendered) => {
-                    repo_bytes += write_rendered(&settings.outputs.commit(Some(&summary), Some(commit)), &rendered);
-                },
-                Err(x) => match x.kind {
-                    tera::ErrorKind::TemplateNotFound(_) if settings.templates.commit.is_none() => {},
-                    _ => error!("ERROR: {:?}", x),
-                },
+            if let Some(templ_file) = settings.templates.commit.as_deref() {
+                match tera.render(templ_file, &local_ctx) {
+                    Ok(rendered) => {
+                        repo_bytes += write_rendered(&settings.outputs.commit(Some(&summary), Some(commit)), &rendered);
+                    },
+                    Err(x) => match x.kind {
+                        _ => error!("ERROR: {:?}", x),
+                    },
+                }
             }
             local_ctx.remove("commit");
         }
@@ -1184,7 +1188,7 @@ fn main() {
         // A potential drawback is that each parallel run needs a
         // clone of the Tera context.
         #[cfg(any(feature = "highlight", feature = "highlight_fast"))]
-        {
+        if settings.templates.file.is_some() {
             let ts = ThemeSet::load_defaults();
             let theme = ts.themes.get(repo_desc.syntax_highlight_theme.as_deref()
                                       .unwrap_or("base16-ocean.light")).expect("Invalid syntax highlighting theme specified.");
@@ -1200,14 +1204,15 @@ fn main() {
                 false => file.clone(),
             };
             local_ctx.try_insert("file", &file).expect("Failed to add file to template engine.");
-            match tera.render(&settings.templates.file.as_deref().unwrap_or("file.html"), &local_ctx) {
-                Ok(rendered) => {
-                    repo_bytes += write_rendered(&settings.outputs.file(Some(&summary), Some(&file)), &rendered);
-                },
-                Err(x) => match x.kind {
-                    tera::ErrorKind::TemplateNotFound(_) if settings.templates.file.is_none() => {},
-                    _ => error!("ERROR: {:?}", x),
-                },
+            if let Some(templ_file) = settings.templates.file.as_deref() {
+                match tera.render(templ_file, &local_ctx) {
+                    Ok(rendered) => {
+                        repo_bytes += write_rendered(&settings.outputs.file(Some(&summary), Some(&file)), &rendered);
+                    },
+                    Err(x) => match x.kind {
+                        _ => error!("ERROR: {:?}", x),
+                    },
+                }
             }
             local_ctx.remove("file");
         }
@@ -1219,14 +1224,15 @@ fn main() {
             }
             let listing = dir_listing(&repo, &dir).expect("Failed to parse file.");
             local_ctx.try_insert("files", &listing).expect("Failed to add dir to template engine.");
-            match tera.render(&settings.templates.dir.as_deref().unwrap_or("dir.html"), &local_ctx) {
-                Ok(rendered) => {
-                    repo_bytes += write_rendered(&settings.outputs.dir(Some(&summary), Some(dir)), &rendered);
-                },
-                Err(x) => match x.kind {
-                    tera::ErrorKind::TemplateNotFound(_) if settings.templates.dir.is_none() => {},
-                    _ => error!("ERROR: {:?}", x),
-                },
+            if let Some(templ_file) = settings.templates.dir.as_deref() {
+                match tera.render(templ_file, &local_ctx) {
+                    Ok(rendered) => {
+                        repo_bytes += write_rendered(&settings.outputs.dir(Some(&summary), Some(dir)), &rendered);
+                    },
+                    Err(x) => match x.kind {
+                        _ => error!("ERROR: {:?}", x),
+                    },
+                }
             }
             local_ctx.remove("files");
         }
@@ -1278,24 +1284,26 @@ fn main() {
     global_ctx.insert("site_generated_ts", &generated_dt.timestamp());
     global_ctx.insert("site_generated_offset", &generated_dt.offset().local_minus_utc());
 
-    match tera.render(&settings.templates.repo_list.as_deref().unwrap_or("repos.html"), &global_ctx) {
-        Ok(rendered) => {
-            global_bytes += write_rendered(&settings.outputs.repo_list(None, None), &rendered);
-        },
-        Err(x) => match x.kind {
-            tera::ErrorKind::TemplateNotFound(_) if settings.templates.repo_list.is_none() => {},
-            _ => error!("ERROR: {:?}", x),
-        },
+    if let Some(templ_file) = settings.templates.repo_list.as_deref() {
+        match tera.render(templ_file, &global_ctx) {
+            Ok(rendered) => {
+                global_bytes += write_rendered(&settings.outputs.repo_list(None, None), &rendered);
+            },
+            Err(x) => match x.kind {
+                _ => error!("ERROR: {:?}", x),
+            },
+        }
     }
 
-    match tera.render(&settings.templates.error.as_deref().unwrap_or("404.html"), &global_ctx) {
-        Ok(rendered) => {
-            global_bytes += write_rendered(&settings.outputs.error(None, None), &rendered);
-        },
-        Err(x) => match x.kind {
-            tera::ErrorKind::TemplateNotFound(_) if settings.templates.error.is_none() => {},
-            _ => error!("ERROR: {:?}", x),
-        },
+    if let Some(templ_file) = settings.templates.error.as_deref() {
+        match tera.render(templ_file, &global_ctx) {
+            Ok(rendered) => {
+                global_bytes += write_rendered(&settings.outputs.error(None, None), &rendered);
+            },
+            Err(x) => match x.kind {
+                _ => error!("ERROR: {:?}", x),
+            },
+        }
     }
 
     if settings.asset_files.is_some() {
