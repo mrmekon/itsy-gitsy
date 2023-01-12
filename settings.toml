@@ -300,6 +300,15 @@ global_assets = "assets/"
 # Each input file is copied to this directory unmodified.
 repo_assets   = "%REPO%/assets/"
 
+# Directory to clone remote repositories into.
+#
+# Remote repositories must be cloned locally to parse.  They are cloned into
+# subdirectories of `cloned_repos`, as bare git repos.  These are not deleted
+# when Itsy-Gitsy finishes.  If the directories already exist when Itsy-Gitsy
+# runs, all remote refs are fetched rather than recloning.
+#
+# Only non-authenticated HTTPS repositories are currently supported.
+cloned_repos  = "bare_repos/"
 
 
 ###############################################################################
@@ -370,3 +379,6 @@ attributes = { status = "active", type = "daemon" }
 #[circadian.attributes]
 #status = "active"
 #type = "daemon"
+
+[ossuary]
+path = "https://github.com/mrmekon/ossuary"

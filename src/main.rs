@@ -777,6 +777,7 @@ struct GitsySettingsTemplates {
 #[derive(Deserialize, Debug)]
 struct GitsySettingsOutputs {
     path: PathBuf,
+    cloned_repos: Option<String>,
     repo_list: Option<String>,
     repo_summary: Option<String>,
     commit: Option<String>,
@@ -1013,14 +1014,84 @@ fn main() {
     // Iterate over each repository, generating outputs
     for repo_desc in &repo_vec {
         loudest!("Repo settings:\n{:#?}", &repo_desc);
+        let start_repo = std::time::Instant::now();
         let mut repo_bytes = 0;
-        let dir = &repo_desc.path;
-        match dir.metadata() {
-            Ok(m) if m.is_dir() => {},
-            _ => continue,
-        }
-        let repo_path: String = dir.to_string_lossy().to_string();
-        let name = repo_desc.name.as_deref().unwrap_or_default();
+        let name = repo_desc.name.as_deref().expect("A configured repository has no name!");
+
+        let repo_path = match &repo_desc.path {
+            url if url.starts_with("https://") ||
+                url.to_str().unwrap_or_default().contains("@") => {
+                if settings.outputs.cloned_repos.is_none() {
+                    error!("ERROR: Found remote repo [{}], but `cloned_repos` directory not configured.", name);
+                    continue;
+                };
+                let clone_path: PathBuf = [settings.outputs.cloned_repos.as_deref().unwrap(),
+                                           name].iter().collect();
+                match Repository::open(&clone_path) {
+                    Ok(r) => {
+                        // Repo already cloned, so update all refs
+                        let refs: Vec<String> = r.references()
+                            .expect(&format!("Unable to enumerate references for repo [{}]", name))
+                            .map(|x| x.expect(&format!("Found invalid reference in repo [{}]", name))
+                                 .name()
+                                 .expect(&format!("Found unnamed reference in repo: [{}]", name))
+                                 .to_string()).collect();
+                        r.find_remote("origin")
+                            .expect(&format!("Clone of repo [{}] missing `origin` remote.", name))
+                            .fetch(&refs, None, None)
+                            .expect(&format!("Failed to fetch updates from remote repo [{}]", name));
+                        clone_path.to_string_lossy().to_string()
+                    },
+                    Err(_) => {
+                        let mut builder = git2::build::RepoBuilder::new();
+
+                        // TODO: git2-rs's ssh support just doesn't seem to
+                        // work.  It finds the repo, but fails to either
+                        // decrypt or use the private key.
+                        //
+                        //if !url.starts_with("https://") {
+                        //    use secrecy::ExposeSecret;
+                        //    // this must be SSH, which needs credentials.
+                        //    let mut callbacks = git2::RemoteCallbacks::new();
+                        //    callbacks.credentials(|_url, username_from_url, _allowed_types| {
+                        //        //git2::Cred::ssh_key_from_agent(username_from_url.unwrap())
+                        //
+                        //        let keyfile = format!("{}/.ssh/id_rsa", std::env::var("HOME").unwrap());
+                        //        let passphrase = pinentry::PassphraseInput::with_default_binary().unwrap()
+                        //            .with_description(&format!("Enter passphrase for SSH key {} (repo: {})",
+                        //                                       keyfile, url.display()))
+                        //            .with_prompt("Passphrase:")
+                        //            .interact().unwrap();
+                        //        git2::Cred::ssh_key(
+                        //            username_from_url.unwrap(),
+                        //            None,
+                        //            Path::new(&keyfile),
+                        //            Some(passphrase.expose_secret()),
+                        //        )
+                        //    });
+                        //    let mut options = git2::FetchOptions::new();
+                        //    options.remote_callbacks(callbacks);
+                        //    builder.fetch_options(options);
+                        //}
+                        builder
+                            .bare(true)
+                            .clone(&url.to_string_lossy().to_string(), &clone_path)
+                            .expect(&format!("Failed to clone remote repo [{}]", name));
+                        clone_path.to_string_lossy().to_string()
+                    }
+                }
+            }
+            dir => {
+                match dir.metadata() {
+                    Ok(m) if m.is_dir() => {},
+                    _ => {
+                        error!("ERROR: local repository [{}]: directory not found: {}", name, dir.display());
+                        continue;
+                    },
+                }
+                dir.to_string_lossy().to_string()
+            },
+        };
         let repo = Repository::open(&repo_path).expect("Unable to find git repository.");
         let metadata = GitsyMetadata {
             full_name: repo_desc.name.clone(),
@@ -1030,7 +1101,6 @@ fn main() {
             attributes: repo_desc.attributes.clone().unwrap_or_default(),
         };
         normal_noln!("[{}{}]... ", name, " ".repeat(longest_repo_name - name.len()));
-        let start_parse = std::time::Instant::now();
         let summary = parse_repo(&repo, &name, &repo_desc, metadata).expect("Failed to analyze repo HEAD.");
 
         let mut local_ctx = Context::from_serialize(&summary).unwrap();
@@ -1184,7 +1254,7 @@ fn main() {
                     true => " - ",
                     _ => "",
                 },
-                start_parse.elapsed().as_secs_f32(), repo_bytes);
+                start_repo.elapsed().as_secs_f32(), repo_bytes);
         total_bytes += repo_bytes;
         size_check!(repo_desc, repo_bytes, total_bytes);
     }

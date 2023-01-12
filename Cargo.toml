@@ -26,3 +26,7 @@ serde = { version = "1.0.152", features = ["derive"] }
 syntect = { version = "5.0.0", default-features = false, optional = true }
 tera = "1.17.1"
 toml = "0.5.10"
+
+# For SSH passphrase support:
+#pinentry = "0.5.0"
+#secrecy = "0.8.0"
