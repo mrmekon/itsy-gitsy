@@ -1,3 +1,13 @@
-Site: {{site_name | default(value="Itsy-Gitsy") }}<br/>
-Description: {{site_description | default(value="A collection of Git repositories")}}<br/>
-<hr/>
+<div class="banner">
+  {% if name -%}
+  <div class="site-title">{{name | default(value="unnamed repository") }}</div>
+  {% else -%}
+  <div class="site-title">{{site_name | default(value="Itsy-Gitsy") }}</div>
+  {% endif -%}
+
+  {% if name -%}
+  <div class="site-description">{{metadata.description | default(value="") }}</div>
+  {% else -%}
+  <div class="site-description">{{site_description | default(value="A collection of Git repositories")}}</div>
+  {% endif -%}
+</div>

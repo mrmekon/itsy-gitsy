@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block tab_files_selected -%}selected{% endblock -%}
+
+{% block content %}
+<div class="full-header tags">File tree</div>
+<table class="summary-table files">
+  <colgroup>
+    <col class="file" />
+    <col class="type nosmall" />
+    <col class="mode nosmall" />
+    <col class="size nosmall" />
+  </colgroup>
+  <tr>
+    <th>File</th>
+    <th class="nosmall">Type</th>
+    <th class="nosmall">Mode</th>
+    <th class="nosmall">Size</th>
+  </tr>
+  {% for file in root_files -%}
+  <tr class="file">
+    <td class="name"><a href="{{file.kind}}/{{file.id}}.html">{{file.name}}{% if file.kind == "dir" -%}/{% endif -%}</a></td>
+    <td class="type nosmall">{{file.kind}}</td>
+    <td class="mode nosmall">{{file.mode | mask(mask="0xfff") | oct}}</td>
+    <td class="size nosmall">{{file.size}}</td>
+  </tr>
+  {% endfor -%}
+</table>
+{% endblock content %}

@@ -1,11 +1,16 @@
 {% extends "base.html" %}
 
+{% block tab_branches_selected -%}selected{% endblock -%}
+
 {% block content %}
-branch: {{branch.ref_name}}<br/>
-hash: {{branch.full_hash}} ({{branch.short_hash}})<br/>
-author: {{branch.author.name}}<br/>
-committer: {{branch.committer.name}}<br/>
-date: {{ts_to_date(ts=branch.ts_utc, tz=branch.ts_offset)}}<br/>
-summary: {{branch.summary}}<br/>
-<pre>{{branch.message}}</pre>
+<div class="branch-page">
+  <table class="branch-header">
+    <tr class="header"><td class="field">branch:</td><td class="value">{{branch.ref_name}}</td></tr>
+    <tr class="header"><td class="field">commit:</td><td class="value">{% if branch.full_hash in commits -%}<a href="{{repo_url | safe}}/commit/{{branch.full_hash}}.html">{{branch.full_hash}}</a>{% else -%}{{branch.full_hash}}{% endif -%}</td></tr>
+    <tr class="header"><td class="field">author:</td><td class="value">{{branch.author.name}} <{{branch.author.email}}></td></tr>
+    <tr class="header"><td class="field">committer:</td><td class="value">{{branch.committer.name}} <{{branch.committer.email}}></td></tr>
+    <tr class="header"><td class="field">date:</td><td class="value">{{ts_to_git_timestamp(ts=branch.ts_utc, tz=branch.ts_offset)}}</td></tr>
+  </table>
+  <div class="branch-message"><pre>{{branch.message}}</pre></div>
+</div>
 {% endblock content %}

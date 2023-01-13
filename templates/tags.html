@@ -1,11 +1,21 @@
 {% extends "base.html" %}
 
+{% block tab_tags_selected -%}selected{% endblock -%}
+
 {% block content %}
-<table class="tags">
+<div class="full-header tags">Tags</div>
+<table class="summary-table tags">
+  <colgroup>
+    <col class="tag" />
+    <col class="oid" />
+    <col class="msg nosmall" />
+    <col class="author" />
+    <col class="date" />
+  </colgroup>
   <tr>
     <th>Tag</th>
-    <th>Commit ID</th>
-    <th>Message</th>
+    <th>Commit</th>
+    <th class="nosmall">Message</th>
     <th>Author</th>
     <th>Date</th>
   </tr>
@@ -13,11 +23,15 @@
   <tr class="tag">
     <td class="name"><a href="tag/{{entry.full_hash}}.html">{{entry.ref_name}}</a></td>
     <td class="oid">{{entry.short_hash}}</td>
-    <td class="commit-msg" style="font-family: sans-serif;">{{entry.summary}}</td>
-    <td class="author">{{entry.author.name}}</td>
+    <td class="msg sans nosmall">{{entry.summary}}</td>
+    <td class="author sans">{{entry.author.name}}</td>
     <td class="date">{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}</td>
   </tr>
   {% endfor -%}
 </table>
-{% if page.prev_page %}<a href="{{ page.prev_page }}">PREV</a>{% endif %} &nbsp; &nbsp; &nbsp; <a href="{{ page.cur_page }}">CUR</a> &nbsp; &nbsp; &nbsp; {%if page.next_page %}<a href="{{ page.next_page }}">NEXT</a>{% endif %}<br>
+<nav class="paginate" role="navigation">
+  <a class="paginate {% if not page.prev_page -%}disabled{% endif -%}" href="{{ page.prev_page }}">&lt; prev page</a>
+  <span class="paginate">[page {{ page.page_idx }} of {{ page.pages }}]</span>
+  <a class="paginate {% if not page.next_page -%}disabled{% endif -%}" href="{{ page.next_page }}">next page &gt;</a>
+</nav>
 {% endblock content %}

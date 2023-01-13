@@ -4,10 +4,15 @@
 <link rel="stylesheet" type="text/css" href="syntax.css" />
 {% endblock html_head_extra %}
 
+{% block tab_files_selected -%}selected{% endblock -%}
+
+{% block subheader -%}
+<div class="breadcrumbs"><span class="site-title"><a href="{{ root_url | safe }}/repos.html">{{site_name | default(value="Itsy-Gitsy") }}</a></span>{% if name -%}&nbsp;&gt;&gt;&nbsp;<span class="site-title">{{ name }}</span>{% endif -%}&nbsp;&gt;&gt;&nbsp;<span class="repo-name">{{ file.path }}</span></div>
+{% endblock -%}
 
 {% block content %}
-{{file.path}} ({{file.name}}) [{{file.id}}]<br/>
--------<br/>
+<div class="file-contents">
+<div class="nocap-header file">{{ file.path }}</div>
 {% if file.contents_safe -%}
 {% if file.contents_preformatted -%}
 <pre>{{file.contents | safe }}</pre>
@@ -17,4 +22,5 @@
 {%- else -%}
 <pre style="margin: 0">{{file.contents}}</pre>
 {%- endif -%}
+</div>
 {% endblock content %}

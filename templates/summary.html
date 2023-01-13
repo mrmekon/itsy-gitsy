@@ -1,90 +1,118 @@
 {% extends "base.html" %}
 
+{% block tab_summary_selected -%}selected{% endblock -%}
+
 {% block content %}
-<a href="history.html">Commit history</a><br>
-<a href="branches.html">All branches</a><br>
-<a href="tags.html">All tags</a><br>
-<br/>
-<table class="commits">
+<div class="summary-header commit">Recent history</div>
+<table class="summary-table commits">
+  <colgroup>
+    <col class="oid" />
+    <col class="msg" />
+    <col class="author" />
+    <col class="date" />
+    <col class="diff nosmall" />
+    <col class="refs nosmall" />
+  </colgroup>
   <tr>
-    <th>Commit ID</th>
+    <th>Commit</th>
     <th>Message</th>
     <th>Author</th>
     <th>Date</th>
-    <th>Diff</th>
-    <th>Refs</th>
+    <th class="nosmall">Diff</th>
+    <th class="nosmall">Refs</th>
   </tr>
   {% for entry in history -%}
   {% if loop.index0 < 10  -%}
-                      <tr class="commit">
-                        <td class="oid"><a href="commit/{{entry.full_hash}}.html">{{entry.short_hash}}</a></td>
-                        <td class="commit-msg" style="font-family: sans-serif;">{{entry.summary}}</td>
-                        <td class="author" style="font-family: sans-serif;">{{entry.author.name}}</td>
-                        <td class="date">{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}</td>
-                        <td class="diff">{{entry.stats.files}} (+{{entry.stats.additions}}/-{{entry.stats.deletions}})</td>
-                        <td class="refs">{%- for ref in entry.alt_refs -%}{%- if loop.index0 > 0 -%},&nbsp; {%- endif -%}<span class="commit-ref">{{ref}}</span>{%- endfor -%}</td>
-</tr>
+  <tr class="commit">
+    <td class="oid"><a href="commit/{{entry.full_hash}}.html">{{entry.short_hash}}</a></td>
+    <td class="msg sans">{{entry.summary}}</td>
+    <td class="author sans">{{entry.author.name}}</td>
+    <td class="date">{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}</td>
+    <td class="diff nosmall">{{entry.stats.files}} (+{{entry.stats.additions}}/-{{entry.stats.deletions}})</td>
+    <td class="refs nosmall">{%- for ref in entry.alt_refs -%}{%- if loop.index0 < 3 -%}<span class="ref">{{ref}}</span>{%- endif -%}{%- endfor -%}{% if entry.alt_refs | length > 3 -%}<span class="ref">...</span>{% endif -%}</td>
+  </tr>
 {% endif -%}
 {% endfor -%}
 </table>
 
-<table class="branches">
+<div class="summary-header branches">Recent branches</div>
+<table class="summary-table branches">
+  <colgroup>
+    <col class="branch" />
+    <col class="oid" />
+    <col class="msg nosmall" />
+    <col class="author" />
+    <col class="date" />
+  </colgroup>
   <tr>
     <th>Branch</th>
-    <th>Commit ID</th>
-    <th>Message</th>
+    <th>Commit</th>
+    <th class="nosmall">Message</th>
     <th>Author</th>
     <th>Date</th>
   </tr>
-  {% for entry in branches -%}
+  {% for entry in branches | sort(attribute="ts_utc") | reverse -%}
   {% if loop.index0 < 10  -%}
   <tr class="branch">
     <td class="name"><a href="branch/{{entry.full_hash}}.html">{{entry.ref_name}}</a></td>
     <td class="oid">{{entry.short_hash}}</td>
-    <td class="commit-msg" style="font-family: sans-serif;">{{entry.summary}}</td>
-    <td class="author">{{entry.author.name}}</td>
+    <td class="msg sans nosmall">{{entry.summary}}</td>
+    <td class="author sans">{{entry.author.name}}</td>
     <td class="date">{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}</td>
   </tr>
   {% endif -%}
   {% endfor -%}
 </table>
 
-<table class="tags">
+<div class="summary-header tags">Recent tags</div>
+<table class="summary-table tags">
+  <colgroup>
+    <col class="tag" />
+    <col class="oid" />
+    <col class="msg nosmall" />
+    <col class="author" />
+    <col class="date" />
+  </colgroup>
   <tr>
     <th>Tag</th>
-    <th>Commit ID</th>
-    <th>Message</th>
+    <th>Commit</th>
+    <th class="nosmall">Message</th>
     <th>Author</th>
     <th>Date</th>
   </tr>
-  {% for entry in tags -%}
+  {% for entry in tags | sort(attribute="ts_utc") | reverse -%}
   {% if loop.index0 < 10  -%}
   <tr class="tag">
     <td class="name"><a href="tag/{{entry.full_hash}}.html">{{entry.ref_name}}</a></td>
     <td class="oid">{{entry.short_hash}}</td>
-    <td class="commit-msg" style="font-family: sans-serif;">{{entry.summary}}</td>
-    <td class="author">{{entry.author.name}}</td>
+    <td class="msg sans nosmall">{{entry.summary}}</td>
+    <td class="author sans">{{entry.author.name}}</td>
     <td class="date">{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}</td>
   </tr>
   {% endif -%}
   {% endfor -%}
 </table>
 
-<table class="files">
+<div class="summary-header tags">File tree</div>
+<table class="summary-table files">
+  <colgroup>
+    <col class="file" />
+    <col class="type nosmall" />
+    <col class="mode nosmall" />
+    <col class="size nosmall" />
+  </colgroup>
   <tr>
     <th>File</th>
-    <th>ID</th>
-    <th>Type</th>
-    <th>Mode</th>
-    <th>Size</th>
+    <th class="nosmall">Type</th>
+    <th class="nosmall">Mode</th>
+    <th class="nosmall">Size</th>
   </tr>
   {% for file in root_files -%}
   <tr class="file">
-    <td class="name"><a href="{{file.kind}}/{{file.id}}.html">{{file.name}}</a></td>
-    <td class="id">{{file.id}}</td>
-    <td class="type">{{file.kind}} ({{file.is_binary}})</td>
-    <td class="mode">{{file.mode}}</td>
-    <td class="size">{{file.size}}</td>
+    <td class="name"><a href="{{repo_url | safe}}/{{file.kind}}/{{file.id}}.html">{{file.name}}{% if file.kind == "dir" -%}/{% endif -%}</a></td>
+    <td class="type nosmall">{{file.kind}}</td>
+    <td class="mode nosmall">{{file.mode | mask(mask="0xfff") | oct}}</td>
+    <td class="size nosmall">{{file.size}}</td>
   </tr>
   {% endfor -%}
 </table>

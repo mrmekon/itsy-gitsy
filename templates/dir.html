@@ -1,21 +1,33 @@
 {% extends "base.html" %}
 
+{% block tab_files_selected -%}selected{% endblock -%}
+
+{% block subheader -%}
+<div class="breadcrumbs"><span class="site-title"><a href="{{ root_url | safe }}/repos.html">{{site_name | default(value="Itsy-Gitsy") }}</a></span>{% if name -%}&nbsp;&gt;&gt;&nbsp;<span class="site-title">{{ name }}</span>{% endif -%}&nbsp;&gt;&gt;&nbsp;<span class="repo-name">{{ dir.path }}</span></div>
+{% endblock -%}
+
 {% block content %}
-<table class="files">
+<div class="nocap-header files">{{ dir.path }}</div>
+<table class="summary-table files">
+  <colgroup>
+    <col class="file" />
+    <col class="type" />
+    <col class="mode" />
+    <col class="size" />
+  </colgroup>
   <tr>
     <th>File</th>
-    <th>ID</th>
     <th>Type</th>
     <th>Mode</th>
     <th>Size</th>
   </tr>
   {% for file in files -%}
   <tr class="file">
-    <td class="file-name"><a href="../{{file.kind}}/{{file.id}}.html">{{file.name}}</a></td>
-    <td class="file-id">{{file.id}}</td>
-    <td class="file-type">{{file.kind}} ({{file.is_binary}})</td>
-    <td class="file-mode">{{file.mode}}</td>
-    <td class="file-size">{{file.size}}</td>
+    <td class="name"><a href="{{repo_url | safe}}/{{file.kind}}/{{file.id}}.html">{{file.name}}{% if file.kind == "dir" -%}/{% endif -%}</a></td>
+    <td class="type">{{file.kind}}</td>
+    <td class="mode">{{file.mode | mask(mask="0xfff") | oct}}</td>
+    <td class="size">{{file.size}}</td>
   </tr>
   {% endfor -%}
+</table>
 {% endblock content %}

@@ -1,31 +1,37 @@
 {% extends "base.html" %}
 
+{% block tab_history_selected -%}selected{% endblock -%}
+
 {% block content %}
-<strong>
-  commit: {{commit.full_hash}}<br/>
-  author: {{commit.author.name}}<br/>
-  committer: {{commit.committer.name}}<br/>
-  parent: {% if commit.parents | length > 0 -%}<a href="{{commit.parents | first}}.html">{{commit.parents | first}}</a>{%-endif-%}<br/>
-</strong>
-<br/>
-<pre style="margin: 0;">{{commit.message}}</pre>
+<div class="commit-page">
+  <table class="commit-header">
+    <tr class="header"><td class="field">commit:</td><td class="value">{{commit.full_hash}}</td></tr>
+    <tr class="header"><td class="field">author:</td><td class="value">{{commit.author.name}} <{{commit.author.email}}></td></tr>
+    <tr class="header"><td class="field">committer:</td><td class="value">{{commit.committer.name}} <{{commit.committer.email}}></td></tr>
+    <tr class="header"><td class="field">date:</td><td class="value">{{ts_to_git_timestamp(ts=commit.ts_utc, tz=commit.ts_offset)}}</td></tr>
+    <tr class="header"><td class="field">parents:</td><td class="value">{% for parent in commit.parents -%}{% if loop.index0 > 0 -%}, {%endif-%}{% if parent in commits -%}<a href="{{parent}}.html">{{parent}}</a>{%else-%}{{parent}}{%endif-%}{%-endfor-%}</td></tr>
+  </table>
+  <div class="commit-message">
+    <pre style="margin: 0;">{{commit.message}}</pre>
+  </div>
 {% for file in commit.diff.files -%}
-<br/>
-<strong>
-  diff --git a/{{file.basefile}} b/{{file.basefile}}<br/>
-  line changes: +{{file.additions}}/-{{file.deletions}}<br/>
-  index {{file.oldid | truncate(length=7,end="")}}..{{file.newid | truncate(length=7,end="")}}<br/>
-  --- {{file.oldfile}}<br/>
-  +++ {{file.newfile}}
-</strong>
+  <div class="commit-diff">
+    <div class="commit-diff-header">
+      <pre>diff --git a/{{file.basefile}} b/{{file.basefile}}
+line changes: +{{file.additions}}/-{{file.deletions}}
+index {{file.oldid | truncate(length=7,end="")}}..{{file.newid | truncate(length=7,end="")}}
+--- {{file.oldfile}}
++++ {{file.newfile}}</pre>
+    </div>
 {% for hunk in file.hunks -%}
-<pre><strong>{{hunk.context}}</strong>
-  {%- for line in hunk.lines -%}
-  {%- if line.kind in ["del","add"] -%}<span style="color: {%- if line.kind == "del" -%}bb0000{%- else -%}00aa00{% endif %}">{%- endif -%}
-    {{line.prefix}}{{line.text}}
-    {%- if line.kind in ["del","add"] -%}</span>{%- endif -%}
-  {%- endfor -%}
+<pre><span class="hunk-header">{{hunk.context}}</span>
+{%- for line in hunk.lines -%}
+<span class="{{ line.kind }}">{{line.prefix}}{{line.text}}</span>
+{%- endfor -%}
 </pre>
 {% endfor -%}
+<br/>
 {% endfor -%}
+</div>
+</div>
 {% endblock content %}
