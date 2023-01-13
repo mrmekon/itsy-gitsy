@@ -76,6 +76,7 @@ pub struct GitsySettingsTemplates {
     pub branch: Option<String>,
     pub tags: Option<String>,
     pub tag: Option<String>,
+    pub files: Option<String>,
     pub file: Option<String>,
     pub dir: Option<String>,
     pub error: Option<String>,
@@ -93,6 +94,7 @@ pub struct GitsySettingsOutputs {
     pub branch: Option<String>,
     pub tags: Option<String>,
     pub tag: Option<String>,
+    pub files: Option<String>,
     pub file: Option<String>,
     pub dir: Option<String>,
     pub error: Option<String>,
@@ -159,12 +161,20 @@ impl GitsySettingsOutputs {
     output_path_fn!(branch,          GitObject, full_hash, false, "%REPO%/branch/%ID%.html");
     output_path_fn!(tags,            GitObject, full_hash, false, "%REPO%/tags%PAGE%.html");
     output_path_fn!(tag,             GitObject, full_hash, false, "%REPO%/tag/%ID%.html");
+    output_path_fn!(files,           GitObject, full_hash, false, "%REPO%/files.html");
     output_path_fn!(file,            GitFile,   id,        false, "%REPO%/file/%ID%.html");
     output_path_fn!(syntax_css,      GitObject, full_hash, false, "%REPO%/file/syntax.css");
     output_path_fn!(dir,             GitFile,   id,        false, "%REPO%/dir/%ID%.html");
     output_path_fn!(error,           GitObject, full_hash, false, "404.html");
     output_path_fn!(global_assets,   GitObject, full_hash, true,  "assets/");
     output_path_fn!(repo_assets,     GitObject, full_hash, true,  "%REPO%/assets/");
+
+    pub fn output_dir(&self) -> String {
+        self.path.clone().canonicalize()
+            .expect(&format!("ERROR: unable to canonicalize output path: {}", self.path.display()))
+            .to_str().expect(&format!("ERROR: unable to parse output path: {}", self.path.display()))
+            .to_string()
+    }
 }
 
 #[derive(Clone, Deserialize, Default, Debug)]

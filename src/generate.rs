@@ -3,7 +3,7 @@ use crate::{
     git::{dir_listing, parse_repo, GitFile, GitRepo, GitsyMetadata},
     loud, louder, loudest, normal, normal_noln,
     settings::{GitsyCli, GitsyRepoDescriptions, GitsySettings, GitsySettingsRepo},
-    template::{DirFilter, FileFilter, Pagination, TsDateFn, TsTimestampFn},
+    template::{DirFilter, FileFilter, HexFilter, MaskFilter, OctFilter, Pagination, TsDateFn, TsTimestampFn},
     util::GitsyError,
 };
 use git2::{Error, Repository};
@@ -169,6 +169,9 @@ impl GitsyGenerator {
         let mut tera = Tera::new(&template_path.to_string_lossy().to_string())?;
         tera.register_filter("only_files", FileFilter {});
         tera.register_filter("only_dirs", DirFilter {});
+        tera.register_filter("hex", HexFilter {});
+        tera.register_filter("oct", OctFilter {});
+        tera.register_filter("mask", MaskFilter {});
         tera.register_function("ts_to_date", TsDateFn {});
         tera.register_function("ts_to_git_timestamp", TsTimestampFn {});
         Ok(tera)
@@ -330,6 +333,8 @@ impl GitsyGenerator {
             if let Some(site_description) = &self.settings.site_description {
                 local_ctx.insert("site_description", site_description);
             }
+            local_ctx.insert("site_dir", &self.settings.outputs.output_dir());
+            local_ctx.insert("site_assets", &self.settings.outputs.global_assets(None, None));
             local_ctx.insert("site_generated_ts", &generated_dt.timestamp());
             local_ctx.insert("site_generated_offset", &generated_dt.offset().local_minus_utc());
 
@@ -488,7 +493,7 @@ impl GitsyGenerator {
                         repo_desc
                             .syntax_highlight_theme
                             .as_deref()
-                            .unwrap_or("base16-ocean.light"),
+                            .unwrap_or("base16-ocean.dark"),
                     )
                     .expect("Invalid syntax highlighting theme specified.");
                 let css: String = css_for_theme_with_class_style(theme, syntect::html::ClassStyle::Spaced)
@@ -549,6 +554,7 @@ impl GitsyGenerator {
                     continue;
                 }
                 let listing = dir_listing(&repo, &dir).expect("Failed to parse file.");
+                local_ctx.insert("dir", dir);
                 local_ctx
                     .try_insert("files", &listing)
                     .expect("Failed to add dir to template engine.");
@@ -564,6 +570,19 @@ impl GitsyGenerator {
                     }
                 }
                 local_ctx.remove("files");
+                local_ctx.remove("dir");
+            }
+
+            if let Some(templ_file) = self.settings.templates.files.as_deref() {
+                match tera.render(templ_file, &local_ctx) {
+                    Ok(rendered) => {
+                        repo_bytes +=
+                            self.write_rendered(&self.settings.outputs.files(Some(&summary), None), &rendered);
+                    }
+                    Err(x) => match x.kind {
+                        _ => error!("ERROR: {:?}", x),
+                    },
+                }
             }
 
             if repo_desc.asset_files.is_some() {
@@ -625,6 +644,8 @@ impl GitsyGenerator {
         if let Some(site_description) = &self.settings.site_description {
             global_ctx.insert("site_description", site_description);
         }
+        global_ctx.insert("site_dir", &self.settings.outputs.output_dir());
+        global_ctx.insert("site_assets", &self.settings.outputs.global_assets(None, None));
         global_ctx.insert("site_generated_ts", &generated_dt.timestamp());
         global_ctx.insert("site_generated_offset", &generated_dt.offset().local_minus_utc());
 

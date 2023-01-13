@@ -3,7 +3,7 @@ use chrono::{naive::NaiveDateTime, offset::FixedOffset, DateTime};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use tera::{to_value, try_get_value, Filter, Function, Value};
+use tera::{from_value, to_value, try_get_value, Filter, Function, Value};
 
 fn ts_to_date(ts: i64, offset: Option<i64>, format: Option<String>) -> String {
     let offset = offset.unwrap_or(0);
@@ -51,6 +51,46 @@ impl Filter for DirFilter {
             })
             .collect();
         Ok(to_value(file_list).unwrap())
+    }
+}
+
+pub struct HexFilter;
+impl Filter for HexFilter {
+    fn filter(&self, value: &Value, _args: &HashMap<String, Value>) -> Result<Value, tera::Error> {
+        let v: i64 = try_get_value!("hex", "value", i64, value);
+        Ok(to_value(format!("{:x}", v)).unwrap())
+    }
+}
+
+pub struct OctFilter;
+impl Filter for OctFilter {
+    fn filter(&self, value: &Value, _args: &HashMap<String, Value>) -> Result<Value, tera::Error> {
+        let v: i64 = try_get_value!("oct", "value", i64, value);
+        Ok(to_value(format!("{:o}", v)).unwrap())
+    }
+}
+
+pub struct MaskFilter;
+impl Filter for MaskFilter {
+    fn filter(&self, value: &Value, args: &HashMap<String, Value>) -> Result<Value, tera::Error> {
+        let v: u64 = try_get_value!("mask", "value", u64, value);
+        let mask: String = from_value(
+            args.get("mask")
+                .expect("ERROR: Tera mask filter called without `mask` parameter.")
+                .clone(),
+        )
+            .expect("ERROR: Tera `mask` parameter is not valid.");
+        let mask: u64 = match mask.starts_with("0x") {
+            true => {
+                let hexstr = mask.strip_prefix("0x").unwrap();
+                u64::from_str_radix(hexstr, 16)
+                    .expect("ERROR: Tera `mask` parameter is invalid hex.")
+            },
+            false => {
+                str::parse::<u64>(&mask).expect("ERROR: Tera `mask` parameter is not valid.")
+            },
+        };
+        Ok(to_value(v & mask).unwrap())
     }
 }
 

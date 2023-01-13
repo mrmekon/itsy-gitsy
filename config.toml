@@ -115,7 +115,7 @@ syntax_highlight = true
 # - `base16-ocean.dark`
 # - `base16-eighties.dark`
 # - `base16-mocha.dark`
-# - `InspiredGithub`
+# - `InspiredGitHub`
 # - `Solarized (dark)`
 # - `Solarized (light)`
 #
@@ -317,6 +317,14 @@ tags         = "tags.html"
 # This template executes many times.
 tag          = "tag.html"
 
+# Template responsible for displaying file tree.
+#
+# Called with the same variables as the `summary` page, this simply gives an
+# alternative locate to list the files in the root of the repository.
+#
+# This template executes once per repository.
+files        = "files.html"
+
 # Template responsible for displaying a single file.
 #
 # Called once per parsed file, with both the whole repository and the current
@@ -373,6 +381,7 @@ branches      = "%REPO%/branches%PAGE%.html"
 branch        = "%REPO%/branch/%ID%.html"
 tags          = "%REPO%/tags%PAGE%.html"
 tag           = "%REPO%/tag/%ID%.html"
+files         = "%REPO%/files.html"
 file          = "%REPO%/file/%ID%.html"
 syntax_css    = "%REPO%/file/syntax.css"
 dir           = "%REPO%/dir/%ID%.html"
