@@ -334,7 +334,7 @@ impl GitsyGenerator {
                 local_ctx.insert("site_description", site_description);
             }
             local_ctx.insert("site_dir", &self.settings.outputs.output_dir());
-            local_ctx.insert("site_assets", &self.settings.outputs.global_assets(None, None));
+            local_ctx.insert("site_assets", &self.settings.outputs.to_relative(&self.settings.outputs.global_assets(None, None)));
             local_ctx.insert("site_generated_ts", &generated_dt.timestamp());
             local_ctx.insert("site_generated_offset", &generated_dt.offset().local_minus_utc());
 
@@ -645,7 +645,7 @@ impl GitsyGenerator {
             global_ctx.insert("site_description", site_description);
         }
         global_ctx.insert("site_dir", &self.settings.outputs.output_dir());
-        global_ctx.insert("site_assets", &self.settings.outputs.global_assets(None, None));
+        global_ctx.insert("site_assets", &self.settings.outputs.to_relative(&self.settings.outputs.global_assets(None, None)));
         global_ctx.insert("site_generated_ts", &generated_dt.timestamp());
         global_ctx.insert("site_generated_offset", &generated_dt.offset().local_minus_utc());
 

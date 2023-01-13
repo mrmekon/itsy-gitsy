@@ -175,6 +175,15 @@ impl GitsySettingsOutputs {
             .to_str().expect(&format!("ERROR: unable to parse output path: {}", self.path.display()))
             .to_string()
     }
+
+    pub fn to_relative(&self, path: &str) -> String {
+        let path_buf = PathBuf::from(path);
+        path_buf.strip_prefix(self.output_dir())
+            .expect(&format!("ERROR: Unable to make path relative: {}", path))
+            .to_str()
+            .expect(&format!("ERROR: Unable to make path relative: {}", path))
+            .to_string()
+    }
 }
 
 #[derive(Clone, Deserialize, Default, Debug)]
