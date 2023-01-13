@@ -700,6 +700,11 @@ impl GitsyGenerator {
             total_bytes,
             start_all.elapsed().as_secs_f32()
         );
+
+        if self.cli.should_open {
+            let _ = open::that(&format!("file://{}", self.settings.outputs.repo_list(None, None)));
+        }
+
         Ok(())
     }
 }

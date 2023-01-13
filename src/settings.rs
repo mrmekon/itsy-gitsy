@@ -18,10 +18,22 @@ use std::sync::atomic::Ordering;
 {all-args}{after-help}
 ")]
 struct CliArgs {
+    /// Path to TOML configuration file
     #[arg(short, long, value_name = "FILE")]
     config: Option<PathBuf>,
+    /// Specify path to a repository.  Overrides config TOML.  Can use multiple times.
+    #[arg(short, long)]
+    repo: Vec<PathBuf>,
+    /// Generate a site suitable for local browsing (file://)
+    #[arg(short, long)]
+    local: bool,
+    /// Open browser to repository listing after generation.
+    #[arg(short, long)]
+    open: bool,
+    /// Don't show any output, except errors and warnings
     #[arg(short, long)]
     quiet: bool,
+    /// Increase verbosity of output.  Specify up to 4 times.
     #[arg(short, long, action = clap::ArgAction::Count)]
     verbose: u8,
 }
@@ -29,6 +41,9 @@ struct CliArgs {
 pub struct GitsyCli {
     pub path: PathBuf,
     pub dir: PathBuf,
+    pub is_local: bool,
+    pub should_open: bool,
+    pub repos: Vec<PathBuf>,
 }
 
 impl GitsyCli {
@@ -61,6 +76,9 @@ impl GitsyCli {
         GitsyCli {
             path: config_path,
             dir: config_dir,
+            is_local: cli.local,
+            should_open: cli.open,
+            repos: cli.repo,
         }
     }
 }
@@ -260,7 +278,11 @@ impl GitsySettings {
     pub fn new(cli: &GitsyCli) -> (GitsySettings, GitsyRepoDescriptions) {
         // Parse the known settings directly into their struct
         let toml = read_to_string(&cli.path).expect(&format!("Configuration file not found: {}", cli.path.display()));
-        let settings: GitsySettings = toml::from_str(&toml).expect("Configuration file is invalid.");
+        let mut settings: GitsySettings = toml::from_str(&toml).expect("Configuration file is invalid.");
+        if cli.is_local {
+            // removing the site URL falls back to using the local directory
+            settings.site_url = None;
+        }
 
         // Settings are valid, so let's move into the directory with the config file
         if cli.dir.to_str().unwrap_or_default().len() > 0 {
@@ -357,6 +379,36 @@ impl GitsySettings {
             }
             _ => {}
         }
+
+        if cli.repos.len() > 0 {
+            repo_descriptions.clear();
+            for dir in &cli.repos {
+                let name: String = dir.file_name()
+                    .expect(&format!("Invalid repository path: {}", dir.display()))
+                    .to_string_lossy().to_string();
+                repo_descriptions.insert(GitsySettingsRepo {
+                    path: dir.clone(),
+                    name: Some(name),
+                    branch: settings.branch.clone(),
+                    render_markdown: settings.render_markdown.clone(),
+                    syntax_highlight: settings.syntax_highlight.clone(),
+                    syntax_highlight_theme: settings.syntax_highlight_theme.clone(),
+                    paginate_history: settings.paginate_history.clone(),
+                    paginate_branches: settings.paginate_branches.clone(),
+                    paginate_tags: settings.paginate_tags.clone(),
+                    limit_history: settings.limit_history.clone(),
+                    limit_commits: settings.limit_commits.clone(),
+                    limit_branches: settings.limit_branches.clone(),
+                    limit_tags: settings.limit_tags.clone(),
+                    limit_tree_depth: settings.limit_tree_depth.clone(),
+                    limit_file_size: settings.limit_file_size.clone(),
+                    limit_repo_size: settings.limit_repo_size.clone(),
+                    limit_total_size: settings.limit_total_size.clone(),
+                    ..Default::default()
+                });
+            }
+        }
+
         (settings, repo_descriptions)
     }
 
