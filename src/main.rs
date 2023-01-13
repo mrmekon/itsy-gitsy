@@ -10,7 +10,6 @@ use settings::{GitsyCli, GitsySettings};
 // TODO:
 //
 //   * basic, light, dark, and fancy default themes
-//   * specify default branch, use instead of HEAD
 //   * better error propagation
 //   * automated tests
 //   * documentation + examples

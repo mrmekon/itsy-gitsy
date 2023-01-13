@@ -192,6 +192,8 @@ pub fn parse_repo(
     let mut history_count = 0;
     let mut branch_count = 0;
     let mut tag_count = 0;
+    let branch_name = settings.branch.as_deref().unwrap_or("master");
+    let branch_obj = repo.revparse_single(branch_name)?;
 
     // Cache the shortnames of all references
     let mut references: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -213,7 +215,7 @@ pub fn parse_repo(
     loud!();
     let mut revwalk = repo.revwalk()?;
     revwalk.set_sorting(git2::Sort::TOPOLOGICAL)?;
-    revwalk.push_head()?;
+    revwalk.push(branch_obj.id())?;
     loudest!(" - Parsing history:");
     for oid in revwalk {
         let oid = oid?;
@@ -379,11 +381,11 @@ pub fn parse_repo(
     let max_depth = settings.limit_tree_depth.unwrap_or(usize::MAX);
     if max_depth > 0 {
         loudest!(" - Walking root files");
-        walk_file_tree(&repo, "HEAD", &mut root_files, 0, usize::MAX, false, "")?;
+        walk_file_tree(&repo, branch_name, &mut root_files, 0, usize::MAX, false, "")?;
         // TODO: maybe this should be optional?  Walking the whole tree
         // could be slow on huge repos.
         loudest!(" - Walking all files");
-        walk_file_tree(&repo, "HEAD", &mut all_files, 0, max_depth, true, "")?;
+        walk_file_tree(&repo, branch_name, &mut all_files, 0, max_depth, true, "")?;
     }
     loud!(" - parsed {} files", all_files.len());
 

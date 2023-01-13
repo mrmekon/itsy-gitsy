@@ -19,6 +19,20 @@
 # This is accessible in all templates.
 #site_description = ""
 
+# Which branch to use for generating history.
+#
+# Itsy-Gitsy currently only supports traversing the history of a single branch,
+# which is the one named here.  Common options are "master" and "main".
+# Defaults to "master" if not specified.
+#
+# Note that this probably should not contain any remote prefix, like "origin/",
+# though it may.  Also note that the "default branch" is only a concept for
+# remote repositories; local repositories do not have the concept, hence this
+# must be explicitly specified.
+#
+# This can also be set per-repository.
+#branch = "master"
+
 # List of directories, each of which contains Git repositories to
 # index.
 #
@@ -457,6 +471,7 @@ generated_by = "Itsy-Gitsy"
 
 # Per-repository settings, same as the global versions described above:
 
+#branch                 = "master"
 #render_markdown        = false
 #syntax_highlighting    = false
 #syntax_highlight_theme = "base16-ocean.dark"
