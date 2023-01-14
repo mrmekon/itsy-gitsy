@@ -335,14 +335,14 @@ div.commit-page span.del {
         font-size: 0.9rem;
     }
 }
-table.clone-url {
+table.links {
     width: 100%;
 }
-table.clone-url td.field {
+table.links td.field {
     font-weight: bold;
-    width: 8rem;
+    width: 10rem;
 }
-table.clone-url td.value {
+table.links td.value {
     text-align: left;
 }
 div.file-contents pre {

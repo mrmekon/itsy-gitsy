@@ -231,6 +231,7 @@ pub struct GitsySettingsRepo {
     pub clone_url: Option<String>,
     pub website: Option<String>,
     pub branch: Option<String>,
+    pub readme_files: Option<Vec<String>>,
     pub asset_files: Option<Vec<String>>,
     pub render_markdown: Option<bool>,
     pub syntax_highlight: Option<bool>,
@@ -273,6 +274,7 @@ pub struct GitsySettings {
     pub site_url: Option<String>,
     pub site_description: Option<String>,
     pub clone_url: Option<String>,
+    pub readme_files: Option<Vec<String>>,
     pub asset_files: Option<Vec<String>>,
     pub branch: Option<String>,
     #[serde(rename(deserialize = "gitsy_templates"))]
@@ -356,6 +358,7 @@ impl GitsySettings {
                         };
                     }
                     global_to_repo!(settings, repo, branch);
+                    global_to_repo!(settings, repo, readme_files);
                     global_to_repo!(settings, repo, render_markdown);
                     global_to_repo!(settings, repo, syntax_highlight);
                     global_to_repo!(settings, repo, syntax_highlight_theme);
@@ -395,6 +398,7 @@ impl GitsySettings {
                             path: dir.path().clone(),
                             name: Some(name),
                             clone_url,
+                            readme_files: settings.readme_files.clone(),
                             branch: settings.branch.clone(),
                             render_markdown: settings.render_markdown.clone(),
                             syntax_highlight: settings.syntax_highlight.clone(),
@@ -434,6 +438,7 @@ impl GitsySettings {
                     path: dir.clone(),
                     name: Some(name),
                     clone_url,
+                    readme_files: settings.readme_files.clone(),
                     branch: settings.branch.clone(),
                     render_markdown: settings.render_markdown.clone(),
                     syntax_highlight: settings.syntax_highlight.clone(),

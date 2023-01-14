@@ -3,11 +3,19 @@
 {% block tab_summary_selected -%}selected{% endblock -%}
 
 {% block content %}
-<table class="clone-url">
+<table class="links">
   <colgroup>
     <col class="field" />
     <col class="value" />
   </colgroup>
+  <tr class="readme">
+    <td class="field website">Documentation:</td>
+    {% if readme and readme.id in file_ids -%}
+    <td class="value website"><a href="{{repo_url | safe}}/{{readme.kind}}/{{readme.id}}.html">{{readme.name | default(value="[none]")}}</a></td>
+    {% else -%}
+    <td class="value website">{{readme.name | default(value="[none]")}}</td>
+    {% endif -%}
+  </tr>
   <tr class="website">
     <td class="field website">Website:</td>
     <td class="value website">{{metadata.website | default(value="[none]")}}</td>

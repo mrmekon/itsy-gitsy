@@ -54,6 +54,16 @@
 # file.
 #recursive_repo_dirs = []
 
+# List of files potentially containing repository documentation.
+#
+# Each repository root is searched for these files, in order.  The
+# first matching file is provided to the templates as a `readme`
+# variable, with the file contents.  Markdown files are rendered as
+# HTML if the feature is enabled.
+#
+# This can also be set per-repository.
+#readme_files = ["README.md", "README"]
+
 # List of files to copy to the site's `global_assets` directory.
 #
 # The files in this list are copied unmodified, and with the same name, to the
@@ -535,6 +545,7 @@ generated_by = "Itsy-Gitsy"
 #limit_context          = 200
 #limit_diffs            = 200
 #asset_files            = ["LICENSE"]
+#readme_files           = ["README.md", "README"]
 
 # An alternative way to specify the user-defined attributes.
 #

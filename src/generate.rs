@@ -345,6 +345,18 @@ impl GitsyGenerator {
             local_ctx.insert("site_generated_ts", &generated_dt.timestamp());
             local_ctx.insert("site_generated_offset", &generated_dt.offset().local_minus_utc());
 
+            if let Some(readmes) = &repo_desc.readme_files {
+                for readme in readmes {
+                    if let Some(file) = parsed_repo.root_files.iter().filter(|x| &x.name == readme).next() {
+                        louder!(" - found readme file: {}", file.name);
+                        let _ = GitsyGenerator::fill_file_contents(&repo, &file, &repo_desc)
+                            .expect("Failed to parse file.");
+                        local_ctx.insert("readme", &file);
+                        break;
+                    }
+                }
+            };
+
             if let Some(templ_file) = self.settings.templates.repo_summary.as_deref() {
                 match tera.render(templ_file, &local_ctx) {
                     Ok(rendered) => {
