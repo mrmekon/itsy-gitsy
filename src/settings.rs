@@ -228,6 +228,7 @@ pub struct GitsySettingsRepo {
     pub path: PathBuf,
     pub name: Option<String>,
     pub description: Option<String>,
+    pub clone_url: Option<String>,
     pub website: Option<String>,
     pub branch: Option<String>,
     pub asset_files: Option<Vec<String>>,
@@ -271,6 +272,7 @@ pub struct GitsySettings {
     pub site_name: Option<String>,
     pub site_url: Option<String>,
     pub site_description: Option<String>,
+    pub clone_url: Option<String>,
     pub asset_files: Option<Vec<String>>,
     pub branch: Option<String>,
     #[serde(rename(deserialize = "gitsy_templates"))]
@@ -347,6 +349,12 @@ impl GitsySettings {
                     if repo.name.is_none() {
                         repo.name = Some(k.clone());
                     }
+                    if repo.clone_url.is_none() {
+                        repo.clone_url = match settings.clone_url.as_ref() {
+                            Some(url) => Some(url.replace("%REPO%", repo.name.as_deref().unwrap_or_default())),
+                            _ => None,
+                        };
+                    }
                     global_to_repo!(settings, repo, branch);
                     global_to_repo!(settings, repo, render_markdown);
                     global_to_repo!(settings, repo, syntax_highlight);
@@ -379,9 +387,14 @@ impl GitsySettings {
                     for dir in read_dir(parent).expect("Repo directory not found.") {
                         let dir = dir.expect("Repo contains invalid entries");
                         let name: String = dir.file_name().to_string_lossy().to_string();
+                        let clone_url = match settings.clone_url.as_ref() {
+                            Some(url) => Some(url.replace("%REPO%", &name)),
+                            _ => None,
+                        };
                         repo_descriptions.insert(GitsySettingsRepo {
                             path: dir.path().clone(),
                             name: Some(name),
+                            clone_url,
                             branch: settings.branch.clone(),
                             render_markdown: settings.render_markdown.clone(),
                             syntax_highlight: settings.syntax_highlight.clone(),
@@ -413,9 +426,14 @@ impl GitsySettings {
                 let name: String = dir.file_name()
                     .expect(&format!("Invalid repository path: {}", dir.display()))
                     .to_string_lossy().to_string();
+                let clone_url = match settings.clone_url.as_ref() {
+                    Some(url) => Some(url.replace("%REPO%", &name)),
+                    _ => None,
+                };
                 repo_descriptions.insert(GitsySettingsRepo {
                     path: dir.clone(),
                     name: Some(name),
+                    clone_url,
                     branch: settings.branch.clone(),
                     render_markdown: settings.render_markdown.clone(),
                     syntax_highlight: settings.syntax_highlight.clone(),

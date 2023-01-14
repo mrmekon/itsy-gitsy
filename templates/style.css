@@ -218,9 +218,6 @@ div.summary-header {
     border-bottom: solid 1px var(--borderdark);
     border-radius: 10px 10px 0 0;
 }
-div.summary-header.commit {
-    margin-top: 0rem;
-}
 div.full-header {
     color: var(--offwhite);
     letter-spacing: 0.05em;
@@ -336,4 +333,14 @@ div.commit-page span.del {
     div.breadcrumbs span.repo-name {
         font-size: 0.9rem;
     }
+}
+table.clone-url {
+    width: 100%;
+}
+table.clone-url td.field {
+    font-weight: bold;
+    width: 8rem;
+}
+table.clone-url td.value {
+    text-align: left;
 }

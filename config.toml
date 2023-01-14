@@ -19,6 +19,13 @@
 # This is accessible in all templates.
 #site_description = ""
 
+# URL where the repositories can be cloned from.
+#
+# Use the "%REPO%" variable to substitute the repository name.
+#
+# This can also be set per-repository.
+#clone_url = "https://github.com/your_user/%REPO%"
+
 # Which branch to use for generating history.
 #
 # Itsy-Gitsy currently only supports traversing the history of a single branch,
@@ -509,6 +516,7 @@ generated_by = "Itsy-Gitsy"
 
 # Per-repository settings, same as the global versions described above:
 
+#clone_url              = "https://github.com/your_user/%REPO%"
 #branch                 = "master"
 #render_markdown        = false
 #syntax_highlighting    = false

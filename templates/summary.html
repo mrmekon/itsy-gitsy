@@ -3,6 +3,21 @@
 {% block tab_summary_selected -%}selected{% endblock -%}
 
 {% block content %}
+<table class="clone-url">
+  <colgroup>
+    <col class="field" />
+    <col class="value" />
+  </colgroup>
+  <tr class="website">
+    <td class="field website">Website:</td>
+    <td class="value website">{{metadata.website | default(value="[none]")}}</td>
+  </tr>
+  <tr class="clone">
+    <td class="field clone">Clone URL:</td>
+    <td class="value clone">{{metadata.clone | default(value="[none]")}}</td>
+  </tr>
+</table>
+
 <div class="summary-header commit">Recent history</div>
 <table class="summary-table commits">
   <colgroup>

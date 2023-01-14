@@ -319,7 +319,7 @@ impl GitsyGenerator {
                 full_name: repo_desc.name.clone(),
                 description: repo_desc.description.clone(),
                 website: repo_desc.website.clone(),
-                clone: None,
+                clone: repo_desc.clone_url.clone(),
                 attributes: repo_desc.attributes.clone().unwrap_or_default(),
             };
             let parsed_repo = parse_repo(&repo, &name, &repo_desc, metadata).expect("Failed to analyze repo HEAD.");
