@@ -265,6 +265,7 @@ div.file-contents {
     background-color: var(--offwhite);
     font-size: 1rem;
     overflow: visible;
+    padding: 0 0.5em 0 0.5em;
 }
 div.commit-page, div.branch-page, div.tag-page {
     background-color: var(--offwhite);
@@ -343,4 +344,18 @@ table.clone-url td.field {
 }
 table.clone-url td.value {
     text-align: left;
+}
+div.file-contents pre {
+    background-color: var(--offerwhite);
+    padding: 0.2em 0.5em 0.2em 0.5em;
+}
+div.file-contents table {
+    border-collapse: true;
+    font-size: 1rem;
+}
+div.file-contents table th {
+    border-bottom: 1px solid;
+}
+div.file-contents table td {
+    padding: 0.2em 0.5em 0.2em 0.5em;
 }

@@ -11,8 +11,8 @@
 {% endblock -%}
 
 {% block content %}
-<div class="file-contents">
 <div class="nocap-header file">{{ file.path }}</div>
+<div class="file-contents">
 {% if file.contents_safe -%}
 {% if file.contents_preformatted -%}
 <pre>{{file.contents | safe }}</pre>
