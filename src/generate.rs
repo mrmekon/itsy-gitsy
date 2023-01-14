@@ -9,7 +9,7 @@ use crate::{
 use git2::{Error, Repository};
 use rayon::prelude::*;
 use std::cmp;
-use std::fs::{create_dir, File};
+use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -182,7 +182,12 @@ impl GitsyGenerator {
         let tera = self.tera_init()?;
 
         // Create output directory
-        let _ = create_dir(self.settings.outputs.path.to_str().expect("Output path invalid."));
+        if self.cli.should_clean {
+            louder!("Cleaning output directory: {}", self.settings.outputs.path.display());
+            self.settings.outputs.clean();
+        }
+        louder!("Creating output directory: {}", self.settings.outputs.path.display());
+        self.settings.outputs.create();
 
         let generated_dt = chrono::offset::Local::now();
         let mut global_bytes = 0;

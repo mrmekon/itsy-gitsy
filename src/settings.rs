@@ -3,7 +3,7 @@ use crate::git::{GitFile, GitObject, GitRepo};
 use clap::Parser;
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fs::{create_dir_all, read_dir, read_to_string};
+use std::fs::{create_dir, create_dir_all, read_dir, remove_dir_all, read_to_string};
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -28,8 +28,11 @@ struct CliArgs {
     #[arg(short, long)]
     local: bool,
     /// Open browser to repository listing after generation.
-    #[arg(short, long)]
+    #[arg(long)]
     open: bool,
+    /// Remove output directory before generating.
+    #[arg(long)]
+    clean: bool,
     /// Don't show any output, except errors and warnings
     #[arg(short, long)]
     quiet: bool,
@@ -43,6 +46,7 @@ pub struct GitsyCli {
     pub dir: PathBuf,
     pub is_local: bool,
     pub should_open: bool,
+    pub should_clean: bool,
     pub repos: Vec<PathBuf>,
 }
 
@@ -78,6 +82,7 @@ impl GitsyCli {
             dir: config_dir,
             is_local: cli.local,
             should_open: cli.open,
+            should_clean: cli.clean,
             repos: cli.repo,
         }
     }
@@ -192,6 +197,20 @@ impl GitsySettingsOutputs {
             .expect(&format!("ERROR: unable to canonicalize output path: {}", self.path.display()))
             .to_str().expect(&format!("ERROR: unable to parse output path: {}", self.path.display()))
             .to_string()
+    }
+
+    pub fn create(&self) {
+        let _ = create_dir(self.path.to_str().expect(&format!("ERROR: output path invalid: {}", self.path.display())));
+    }
+
+    pub fn clean(&self) {
+        if !self.path.exists() {
+            return;
+        }
+        let dir: PathBuf = PathBuf::from(&self.output_dir());
+        assert!(dir.is_dir(), "ERROR: Output directory is... not a directory? {}", dir.display());
+        remove_dir_all(&dir)
+            .expect(&format!("ERROR: failed to clean output directory: {}", dir.display()));
     }
 
     pub fn to_relative(&self, path: &str) -> String {
