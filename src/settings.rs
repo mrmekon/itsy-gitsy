@@ -227,6 +227,8 @@ pub struct GitsySettingsRepo {
     pub limit_file_size: Option<usize>,
     pub limit_repo_size: Option<usize>,
     pub limit_total_size: Option<usize>,
+    pub limit_context: Option<usize>,
+    pub limit_diffs: Option<usize>,
 }
 
 impl Hash for GitsySettingsRepo {
@@ -267,6 +269,8 @@ pub struct GitsySettings {
     pub limit_file_size: Option<usize>,
     pub limit_repo_size: Option<usize>,
     pub limit_total_size: Option<usize>,
+    pub limit_context: Option<usize>,
+    pub limit_diffs: Option<usize>,
     pub render_markdown: Option<bool>,
     pub syntax_highlight: Option<bool>,
     pub syntax_highlight_theme: Option<String>,
@@ -339,6 +343,8 @@ impl GitsySettings {
                     global_to_repo!(settings, repo, limit_file_size);
                     global_to_repo!(settings, repo, limit_repo_size);
                     global_to_repo!(settings, repo, limit_total_size);
+                    global_to_repo!(settings, repo, limit_context);
+                    global_to_repo!(settings, repo, limit_diffs);
 
                     repo_descriptions.insert(repo);
                 }
@@ -372,6 +378,8 @@ impl GitsySettings {
                             limit_file_size: settings.limit_file_size.clone(),
                             limit_repo_size: settings.limit_repo_size.clone(),
                             limit_total_size: settings.limit_total_size.clone(),
+                            limit_context: settings.limit_context.clone(),
+                            limit_diffs: settings.limit_diffs.clone(),
                             ..Default::default()
                         });
                     }
@@ -404,6 +412,8 @@ impl GitsySettings {
                     limit_file_size: settings.limit_file_size.clone(),
                     limit_repo_size: settings.limit_repo_size.clone(),
                     limit_total_size: settings.limit_total_size.clone(),
+                    limit_context: settings.limit_context.clone(),
+                    limit_diffs: settings.limit_diffs.clone(),
                     ..Default::default()
                 });
             }

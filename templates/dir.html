@@ -23,7 +23,12 @@
   </tr>
   {% for file in files -%}
   <tr class="file">
-    <td class="name"><a href="{{repo_url | safe}}/{{file.kind}}/{{file.id}}.html">{{file.name}}{% if file.kind == "dir" -%}/{% endif -%}</a></td>
+    {% if file.kind == "dir" -%}
+    {% set file_name = file.name ~ "/" -%}
+    {% else -%}
+    {% set file_name = file.name -%}
+    {% endif -%}
+    <td class="name">{% if file.id in file_ids -%}<a href="{{repo_url | safe}}/{{file.kind}}/{{file.id}}.html">{{file_name}}</a>{% else -%}{{file_name}}{% endif -%}</td>
     <td class="type">{{file.kind}}</td>
     <td class="mode">{{file.mode | mask(mask="0xfff") | oct}}</td>
     <td class="size">{{file.size}}</td>

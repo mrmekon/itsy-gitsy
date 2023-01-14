@@ -24,11 +24,11 @@
   {% for entry in history -%}
   {% if loop.index0 < 10  -%}
   <tr class="commit">
-    <td class="oid"><a href="commit/{{entry.full_hash}}.html">{{entry.short_hash}}</a></td>
+    <td class="oid">{% if entry.full_hash in commit_ids -%}<a href="commit/{{entry.full_hash}}.html">{{entry.short_hash}}</a>{% else -%}{{entry.short_hash}}{% endif -%}</td>
     <td class="msg sans">{{entry.summary}}</td>
     <td class="author sans">{{entry.author.name}}</td>
     <td class="date">{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}</td>
-    <td class="diff nosmall">{{entry.stats.files}} (+{{entry.stats.additions}}/-{{entry.stats.deletions}})</td>
+    <td class="diff nosmall">{% if entry.stats -%}{{entry.stats.files}} (+{{entry.stats.additions}}/-{{entry.stats.deletions}}){% endif -%}</td>
     <td class="refs nosmall">{%- for ref in entry.alt_refs -%}{%- if loop.index0 < 3 -%}<span class="ref">{{ref}}</span>{%- endif -%}{%- endfor -%}{% if entry.alt_refs | length > 3 -%}<span class="ref">...</span>{% endif -%}</td>
   </tr>
 {% endif -%}
@@ -109,7 +109,12 @@
   </tr>
   {% for file in root_files -%}
   <tr class="file">
-    <td class="name"><a href="{{repo_url | safe}}/{{file.kind}}/{{file.id}}.html">{{file.name}}{% if file.kind == "dir" -%}/{% endif -%}</a></td>
+    {% if file.kind == "dir" -%}
+    {% set file_name = file.name ~ "/" -%}
+    {% else -%}
+    {% set file_name = file.name -%}
+    {% endif -%}
+    <td class="name">{% if file.id in file_ids -%}<a href="{{repo_url | safe}}/{{file.kind}}/{{file.id}}.html">{{file_name}}</a>{% else -%}{{file_name}}{% endif -%}</td>
     <td class="type nosmall">{{file.kind}}</td>
     <td class="mode nosmall">{{file.mode | mask(mask="0xfff") | oct}}</td>
     <td class="size nosmall">{{file.size}}</td>

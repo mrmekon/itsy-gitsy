@@ -14,6 +14,7 @@
   <div class="commit-message">
     <pre style="margin: 0;">{{commit.message}}</pre>
   </div>
+{% if commit.diff -%}
 {% for file in commit.diff.files -%}
   <div class="commit-diff">
     <div class="commit-diff-header">
@@ -32,6 +33,7 @@ index {{file.oldid | truncate(length=7,end="")}}..{{file.newid | truncate(length
 {% endfor -%}
 <br/>
 {% endfor -%}
+{% endif -%}
 </div>
 </div>
 {% endblock content %}

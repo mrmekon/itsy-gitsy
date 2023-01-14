@@ -232,6 +232,44 @@ syntax_highlight_theme = "base16-ocean.light"
 # This can also be set per-repository.
 #limit_total_size = 524288000
 
+# Limits number of contextual elements available to templates.
+#
+# By default, if this limit is not set, all repository elements
+# (history, branches, tags, commits) are provided in full to all
+# repository templates, so every page can see all repo metadata.
+#
+# For parallel output generation, one copy of the repo metadata is
+# made per CPU core.  All of this must be loaded into RAM, which means
+# large repositories can be very slow to process, or exhaust memory.
+#
+# This setting limits all elements, *except* those directly relevant
+# to the page being rendered.  For example, all elements except
+# `branches` are limited in the `branches` template, all elements
+# except `tags` are limited in the `tags` template, and so on.
+#
+# This is critically important for very large repositories, to prevent
+# them from consuming all memory and destroying all things.
+#
+# This can also be set per-repository.
+#limit_context = 200
+
+# Limit number of diffs and diff statistics.
+#
+# By default, if this limit is not set, every history item contains
+# statistics (files changes, additions, and deletions), and every
+# commit item contains a diff.  These are all held in memory and
+# passed to each repository template.
+#
+# While parsing history, and if this limit is reached, subsequent
+# history and commit items will not have diffs and statistics
+# included.
+#
+# This is critically important for very large repositories, to prevent
+# them from consuming all memory and destroying all things.
+#
+# This can also be set per-repository.
+#limit_diffs = 200
+
 
 
 ###############################################################################
@@ -486,6 +524,8 @@ generated_by = "Itsy-Gitsy"
 #limit_file_size        = 2097152
 #limit_repo_size        = 52428800
 #limit_total_size       = 524288000
+#limit_context          = 200
+#limit_diffs            = 200
 #asset_files            = ["LICENSE"]
 
 # An alternative way to specify the user-defined attributes.

@@ -23,11 +23,11 @@
   </tr>
   {% for entry in history -%}
   <tr class="commit">
-    <td class="oid"><a href="commit/{{entry.full_hash}}.html">{{entry.short_hash}}</a></td>
+    <td class="oid">{% if entry.full_hash in commit_ids -%}<a href="commit/{{entry.full_hash}}.html">{{entry.short_hash}}</a>{% else -%}{{entry.short_hash}}{% endif -%}</td>
     <td class="msg sans">{{entry.summary}}</td>
     <td class="author sans">{{entry.author.name}}</td>
     <td class="date">{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}</td>
-    <td class="diff nosmall">{{entry.stats.files}} (+{{entry.stats.additions}}/-{{entry.stats.deletions}})</td>
+    <td class="diff nosmall">{% if entry.stats -%}{{entry.stats.files}} (+{{entry.stats.additions}}/-{{entry.stats.deletions}}){% endif -%}</td>
     <td class="refs nosmall">{%- for ref in entry.alt_refs -%}{%- if loop.index0 < 3 -%}<span class="ref">{{ref}}</span>{%- endif -%}{%- endfor -%}{% if entry.alt_refs | length > 3 -%}<span class="ref">...</span>{% endif -%}</td>
   </tr>
 {% endfor -%}

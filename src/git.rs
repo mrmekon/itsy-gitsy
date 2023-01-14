@@ -12,7 +12,7 @@ fn first_line(msg: &[u8]) -> String {
     message.lines().next().unwrap_or("[no commit message]").to_owned()
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 pub struct GitRepo {
     pub name: String,
     pub metadata: GitsyMetadata,
@@ -22,9 +22,45 @@ pub struct GitRepo {
     pub root_files: Vec<GitFile>,
     pub all_files: Vec<GitFile>,
     pub commits: BTreeMap<String, GitObject>,
+    // TODO: this is duplication that should be handled with
+    // references.  Used so templates can deduce which files have been
+    // generated.
+    pub commit_ids: Vec<String>,
+    pub file_ids: Vec<String>,
 }
 
-#[derive(Serialize, Default)]
+impl GitRepo {
+    pub fn minimal_clone(&self, max_entries: usize) -> Self {
+        let mut new_commits: BTreeMap<String, GitObject> = BTreeMap::new();
+        let new_history: Vec<GitObject> = self.history.iter().cloned().take(max_entries).collect();
+        for entry in &new_history {
+            if self.commits.contains_key(&entry.full_hash) {
+                new_commits.insert(entry.full_hash.clone(),
+                                   self.commits.get(&entry.full_hash).unwrap().clone());
+            }
+        }
+        let all_files: Vec<GitFile> = self.all_files.iter().cloned().take(max_entries).collect();
+        GitRepo {
+            name: self.name.clone(),
+            metadata: self.metadata.clone(),
+            history: new_history,
+            branches: self.branches.iter().cloned().take(max_entries).collect(),
+            tags: self.tags.iter().cloned().take(max_entries).collect(),
+            // Don't minimize the root tree, because that's weird UX
+            // for the summary page.
+            root_files: self.root_files.clone(),
+            all_files,
+            commits: new_commits,
+            // These are not minimized because they're a listing of
+            // which generated files should exist, and are needed for
+            // ensuring valid links on every page.
+            file_ids: self.file_ids.clone(),
+            commit_ids: self.commit_ids.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Default)]
 pub struct GitsyMetadata {
     pub full_name: Option<String>,
     pub description: Option<String>,
@@ -33,13 +69,13 @@ pub struct GitsyMetadata {
     pub attributes: BTreeMap<String, toml::Value>,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Clone, Serialize, Default)]
 pub struct GitAuthor {
     pub name: Option<String>,
     pub email: Option<String>,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Clone, Serialize, Default)]
 pub struct GitObject {
     pub full_hash: String,
     pub short_hash: String,
@@ -58,7 +94,7 @@ pub struct GitObject {
     pub diff: Option<GitDiffCommit>,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Clone, Serialize, Default)]
 pub struct GitStats {
     pub files: usize,
     pub additions: usize,
@@ -80,7 +116,7 @@ pub struct GitFile {
     pub contents_preformatted: bool,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Clone, Serialize, Default)]
 pub struct GitDiffCommit {
     pub files: Vec<GitDiffFile>,
     pub file_count: usize,
@@ -88,7 +124,7 @@ pub struct GitDiffCommit {
     pub deletions: usize,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Clone, Serialize, Default)]
 pub struct GitDiffFile {
     pub oldfile: String,
     pub newfile: String,
@@ -101,13 +137,13 @@ pub struct GitDiffFile {
     pub hunks: Vec<GitDiffHunk>,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Clone, Serialize, Default)]
 pub struct GitDiffHunk {
     pub context: String,
     pub lines: Vec<GitDiffLine>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct GitDiffLine {
     pub kind: &'static str,
     pub prefix: &'static str,
@@ -195,7 +231,10 @@ pub fn parse_repo(
     let branch_name = settings.branch.as_deref().unwrap_or("master");
     let branch_obj = repo.revparse_single(branch_name)?;
 
+    loud!();
+
     // Cache the shortnames of all references
+    loudest!(" - Parsing references");
     let mut references: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for refr in repo.references()? {
         let refr = refr?;
@@ -211,20 +250,24 @@ pub fn parse_repo(
             }
         }
     }
+    loud!(" - parsed {} references", references.len());
 
-    loud!();
     let mut revwalk = repo.revwalk()?;
-    revwalk.set_sorting(git2::Sort::TOPOLOGICAL)?;
+    // TODO: TOPOLOGICAL might be better, but it's also ungodly slow
+    // on large repos.  Maybe this should be configurable.
+    //
+    //revwalk.set_sorting(git2::Sort::TOPOLOGICAL)?;
+    revwalk.set_sorting(git2::Sort::NONE)?;
     revwalk.push(branch_obj.id())?;
     loudest!(" - Parsing history:");
-    for oid in revwalk {
+    for (idx, oid) in revwalk.by_ref().enumerate() {
         let oid = oid?;
         if commit_count >= settings.limit_commits.unwrap_or(usize::MAX)
             || history_count >= settings.limit_history.unwrap_or(usize::MAX)
         {
             break;
         }
-        commits.insert(oid.to_string(), parse_commit(repo, &oid.to_string())?);
+        commits.insert(oid.to_string(), parse_commit(idx, settings, repo, &oid.to_string())?);
         commit_count += 1;
         let commit = repo.find_commit(oid)?;
         let obj = repo.revparse_single(&commit.id().to_string())?;
@@ -232,21 +275,37 @@ pub fn parse_repo(
         let short_hash = obj.short_id()?.as_str().unwrap_or_default().to_string();
 
         let mut parents: Vec<String> = vec![];
-        let a = if commit.parents().len() == 1 {
-            let parent = commit.parent(0)?;
-            parents.push(parent.id().to_string());
-            Some(parent.tree()?)
-        } else {
-            None
+        let a = match commit.parents().len() {
+            x if x == 1 => {
+                let parent = commit.parent(0).unwrap();
+                parents.push(parent.id().to_string());
+                Some(parent.tree()?)
+            }
+            x if x > 1 => {
+                for parent in commit.parents() {
+                    parents.push(parent.id().to_string());
+                }
+                let parent = commit.parent(0).unwrap();
+                Some(parent.tree()?)
+            }
+            _ => None,
         };
         let b = commit.tree()?;
         let mut diffopts = DiffOptions::new();
-        let diff = repo.diff_tree_to_tree(a.as_ref(), Some(&b), Some(&mut diffopts))?;
-        let stats = diff.stats()?;
-        let stats = GitStats {
-            files: stats.files_changed(),
-            additions: stats.insertions(),
-            deletions: stats.deletions(),
+        let stats = match idx < settings.limit_diffs.unwrap_or(usize::MAX) {
+            true => {
+                let diff = repo.diff_tree_to_tree(a.as_ref(), Some(&b), Some(&mut diffopts))?;
+                let stats = diff.stats()?;
+                let stats = GitStats {
+                    files: stats.files_changed(),
+                    additions: stats.insertions(),
+                    deletions: stats.deletions(),
+                };
+                Some(stats)
+            },
+            false => {
+                None
+            },
         };
 
         let alt_refs: Vec<String> = references
@@ -273,7 +332,7 @@ pub fn parse_repo(
                     email: commit.author().email().map(|x| x.to_owned()),
                 },
                 summary: Some(first_line(commit.message_bytes())),
-                stats: Some(stats),
+                stats,
                 ..Default::default()
             });
             history_count += 1;
@@ -325,7 +384,7 @@ pub fn parse_repo(
     loud!(" - parsed {} branches", branch_count);
 
     loudest!(" - Parsing tags:");
-    for tag in repo.tag_names(None)?.iter() {
+    for tag in repo.tag_names(None)?.iter().rev() {
         if tag_count >= settings.limit_tags.unwrap_or(usize::MAX) {
             break;
         }
@@ -389,6 +448,8 @@ pub fn parse_repo(
     }
     loud!(" - parsed {} files", all_files.len());
 
+    let file_ids = all_files.iter().map(|x| x.id.clone()).collect();
+    let commit_ids = commits.keys().cloned().collect();
     Ok(GitRepo {
         name: name.to_string(),
         metadata,
@@ -398,10 +459,13 @@ pub fn parse_repo(
         root_files,
         all_files,
         commits,
+        commit_ids,
+        file_ids,
     })
 }
 
-pub fn parse_commit(repo: &Repository, refr: &str) -> Result<GitObject, Error> {
+pub fn parse_commit(idx: usize, settings: &GitsySettingsRepo,
+                    repo: &Repository, refr: &str) -> Result<GitObject, Error> {
     let obj = repo.revparse_single(refr)?;
     let commit = repo.find_commit(obj.id())?;
     let mut parents: Vec<String> = vec![];
@@ -416,103 +480,118 @@ pub fn parse_commit(repo: &Repository, refr: &str) -> Result<GitObject, Error> {
             for parent in commit.parents() {
                 parents.push(parent.id().to_string());
             }
-            None
+            let parent = commit.parent(0).unwrap();
+            Some(parent.tree()?)
         }
         _ => None,
     };
     let b = commit.tree()?;
     let mut diffopts = DiffOptions::new();
+    diffopts.enable_fast_untracked_dirs(true);
     let diff = repo.diff_tree_to_tree(a.as_ref(), Some(&b), Some(&mut diffopts))?;
-    let stats = diff.stats()?;
+    let commit_diff: Option<GitDiffCommit> = match idx < settings.limit_diffs.unwrap_or(usize::MAX) {
+        true => {
+            let stats = diff.stats()?;
 
-    let mut commit_diff: GitDiffCommit = GitDiffCommit {
-        file_count: stats.files_changed(),
-        additions: stats.insertions(),
-        deletions: stats.deletions(),
-        ..Default::default()
-    };
-    let files: Rc<RefCell<Vec<GitDiffFile>>> = Rc::new(RefCell::new(vec![]));
-
-    diff.foreach(
-        &mut |file, _progress| {
-            let mut file_diff: GitDiffFile = Default::default();
-            file_diff.newfile = match file.status() {
-                git2::Delta::Deleted => "/dev/null".to_owned(),
-                _ => file
-                    .new_file()
-                    .path()
-                    .map(|x| "b/".to_string() + &x.to_string_lossy())
-                    .unwrap_or("/dev/null".to_string()),
-            };
-            file_diff.oldfile = match file.status() {
-                git2::Delta::Added => "/dev/null".to_owned(),
-                _ => file
-                    .old_file()
-                    .path()
-                    .map(|x| "a/".to_string() + &x.to_string_lossy())
-                    .unwrap_or("/dev/null".to_string()),
-            };
-            file_diff.basefile = match file.status() {
-                git2::Delta::Added => file
-                    .new_file()
-                    .path()
-                    .map(|x| x.to_string_lossy().to_string())
-                    .unwrap_or("/dev/null".to_string()),
-                _ => file
-                    .old_file()
-                    .path()
-                    .map(|x| x.to_string_lossy().to_string())
-                    .unwrap_or("/dev/null".to_string()),
-            };
-            file_diff.oldid = file.old_file().id().to_string();
-            file_diff.newid = file.new_file().id().to_string();
-            files.borrow_mut().push(file_diff);
-            true
+            Some(GitDiffCommit {
+                file_count: stats.files_changed(),
+                additions: stats.insertions(),
+                deletions: stats.deletions(),
+                ..Default::default()
+            })
         },
-        None, // TODO: handle binary files?
-        Some(&mut |_file, hunk| {
-            let mut files = files.borrow_mut();
-            let file_diff: &mut GitDiffFile = files.last_mut().expect("Diff hunk not associated with a file!");
-            let mut hunk_diff: GitDiffHunk = Default::default();
-            hunk_diff.context = String::from_utf8_lossy(hunk.header()).to_string();
-            file_diff.hunks.push(hunk_diff);
-            true
-        }),
-        Some(&mut |_file, _hunk, line| {
-            let mut files = files.borrow_mut();
-            let file_diff: &mut GitDiffFile = files.last_mut().expect("Diff hunk not associated with a file!");
-            let hunk_diff: &mut GitDiffHunk = file_diff
-                .hunks
-                .last_mut()
-                .expect("Diff line not associated with a hunk!");
-            let (kind, prefix) = match line.origin() {
-                ' ' => ("ctx", " "),
-                '-' => ("del", "-"),
-                '+' => ("add", "+"),
-                _ => ("other", " "),
-            };
-            match line.origin() {
-                '-' => file_diff.deletions += 1,
-                '+' => file_diff.additions += 1,
-                _ => {}
-            }
-            let line_diff = GitDiffLine {
-                text: String::from_utf8_lossy(line.content()).to_string(),
-                kind,
-                prefix,
-            };
-            hunk_diff.lines.push(line_diff);
-            true
-        }),
-    )?;
-
-    match Rc::try_unwrap(files) {
-        Ok(files) => {
-            let files: Vec<GitDiffFile> = files.into_inner();
-            commit_diff.files = files;
+        false => {
+            None
         }
-        Err(_) => {}
-    }
+    };
+
+    let commit_diff = match commit_diff {
+        None => None,
+        Some(mut commit_diff) => {
+            let files: Rc<RefCell<Vec<GitDiffFile>>> = Rc::new(RefCell::new(vec![]));
+            diff.foreach(
+                &mut |file, _progress| {
+                    let mut file_diff: GitDiffFile = Default::default();
+                    file_diff.newfile = match file.status() {
+                        git2::Delta::Deleted => "/dev/null".to_owned(),
+                        _ => file
+                            .new_file()
+                            .path()
+                            .map(|x| "b/".to_string() + &x.to_string_lossy())
+                            .unwrap_or("/dev/null".to_string()),
+                    };
+                    file_diff.oldfile = match file.status() {
+                        git2::Delta::Added => "/dev/null".to_owned(),
+                        _ => file
+                            .old_file()
+                            .path()
+                            .map(|x| "a/".to_string() + &x.to_string_lossy())
+                            .unwrap_or("/dev/null".to_string()),
+                    };
+                    file_diff.basefile = match file.status() {
+                        git2::Delta::Added => file
+                            .new_file()
+                            .path()
+                            .map(|x| x.to_string_lossy().to_string())
+                            .unwrap_or("/dev/null".to_string()),
+                        _ => file
+                            .old_file()
+                            .path()
+                            .map(|x| x.to_string_lossy().to_string())
+                            .unwrap_or("/dev/null".to_string()),
+                    };
+                    file_diff.oldid = file.old_file().id().to_string();
+                    file_diff.newid = file.new_file().id().to_string();
+                    files.borrow_mut().push(file_diff);
+                    true
+                },
+                None, // TODO: handle binary files?
+                Some(&mut |_file, hunk| {
+                    let mut files = files.borrow_mut();
+                    let file_diff: &mut GitDiffFile = files.last_mut().expect("Diff hunk not associated with a file!");
+                    let mut hunk_diff: GitDiffHunk = Default::default();
+                    hunk_diff.context = String::from_utf8_lossy(hunk.header()).to_string();
+                    file_diff.hunks.push(hunk_diff);
+                    true
+                }),
+                Some(&mut |_file, _hunk, line| {
+                    let mut files = files.borrow_mut();
+                    let file_diff: &mut GitDiffFile = files.last_mut().expect("Diff hunk not associated with a file!");
+                    let hunk_diff: &mut GitDiffHunk = file_diff
+                        .hunks
+                        .last_mut()
+                        .expect("Diff line not associated with a hunk!");
+                    let (kind, prefix) = match line.origin() {
+                        ' ' => ("ctx", " "),
+                        '-' => ("del", "-"),
+                        '+' => ("add", "+"),
+                        _ => ("other", " "),
+                    };
+                    match line.origin() {
+                        '-' => file_diff.deletions += 1,
+                        '+' => file_diff.additions += 1,
+                        _ => {}
+                    }
+                    let line_diff = GitDiffLine {
+                        text: String::from_utf8_lossy(line.content()).to_string(),
+                        kind,
+                        prefix,
+                    };
+                    hunk_diff.lines.push(line_diff);
+                    true
+                }),
+            )?;
+
+            match Rc::try_unwrap(files) {
+                Ok(files) => {
+                    let files: Vec<GitDiffFile> = files.into_inner();
+                    commit_diff.files = files;
+                }
+                Err(_) => {}
+            }
+            Some(commit_diff)
+        }
+    };
 
     let tree = obj.peel_to_tree()?;
     let summary = GitObject {
@@ -536,7 +615,7 @@ pub fn parse_commit(repo: &Repository, refr: &str) -> Result<GitObject, Error> {
         summary: Some(first_line(commit.message_bytes())),
         message: commit.message().map(|x| x.to_string()),
         stats: None,
-        diff: Some(commit_diff),
+        diff: commit_diff,
     };
 
     Ok(summary)
