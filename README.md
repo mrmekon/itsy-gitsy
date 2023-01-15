@@ -6,13 +6,15 @@ A static website generator for Git repositories.
 
 Itsy-Gitsy spiders across a collection of Git repositories, passes a subset of their contents through user-defined *input templates*, and generates a set of *output files*.  In standard usage, the input templates describe a website layout, and the output is a static website suitable for browsing locally, or hosting on a web server.
 
-Since the output is always static text files, Itsy-Gitsy can generate more than just websites.  With custom templates, it can render your Git repositories as plain text, CSV, LaTeX, org-mode, Markdown, TOML, or whatever format you desire.
+[See a demo here.](https://git.trevorbentley.com/)
+
+Since the output is static text files, Itsy-Gitsy can generate more than just websites.  With custom templates, it can render your Git repositories as plain text, CSV, LaTeX, org-mode, Markdown, TOML, or whatever format you desire.
 
 More generically, Itsy-Gitsy is a utility to generate text-based document trees from Git repositories based on descriptive templates.
 
 ## Why
 
-The primary motivation is for self-hosting simple Git repository frontends without a dynamic web application.  For self-hosters, there can be many motivations for not wanting dynamically generated content, particularly resource, security, or maintenance requirements on the web server.  Most existing Git repository frontends are dynamic "forges" or "hubs", where even the lightweight ones are large, complex applications with significant resource requirements and large attack surfaces.
+The primary motivation is for self-hosting simple Git repository frontends without a dynamic web application.  For self-hosters, there can be many motivations for not wanting dynamically generated content: particularly system resource, security, or maintenance requirements on the web server.  Most existing Git repository frontends are dynamic "forges" or "hubs", where even the lightweight ones are large, complex applications with significant resource requirements and large attack surfaces.
 
 Side benefits include offline, local browsing without a web host, and generation of non-website content.  For instance, Itsy-Gitsy is also suitable for generating Git repositories as Gopher or Gemini sites, or even e-mail newsletters.
 
@@ -70,7 +72,7 @@ $ cargo build --release
 $ ./target/release/itsy-gitsy --clean --local --open --repo "https://github.com/mrmekon/itsy-gitsy"
 ```
 \
-Next, you will want to edit `config.toml` and point it to the Git repositories you want to index.  The default configuration file includes documentation to help you get started.
+Next, you will want to edit `config.toml` and point it to the Git repositories you want to index.  The default configuration file (`config.toml`) includes documentation to help you get started.
 
 Now you can regenerate and view your repositories locally with:
 ```bash
@@ -159,7 +161,7 @@ As always, if security is a concern, best practice is to follow the rules of lea
 
 ## Performance
 
-High performance is not a primary goal of Itsy-Gitsy, since it is primarily intended for indexing small personal projects, but various settings are provided to allow it to handle large repositories.
+High performance is not a primary goal of Itsy-Gitsy, since it is mostly intended for indexing small personal projects, but various settings are provided to allow it to handle large repositories.
 
 The majority of parsing and generation is linear and single-threaded, except for rendering file content output.  File contents are rendered in parallel, including syntax highlighting and Markdown rendering.
 
