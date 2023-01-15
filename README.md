@@ -4,7 +4,7 @@ A static website generator for Git repositories.
 
 ## What
 
-Itsy-Gitsy spiders across a collection of Git repositories, passes their contents through user-defined *input templates*, and generates a set of *output files*.  In standard usage, the input templates describe a website layout, and the output is a static website suitable for browsing locally, or hosting on a web server.
+Itsy-Gitsy spiders across a collection of Git repositories, passes a subset of their contents through user-defined *input templates*, and generates a set of *output files*.  In standard usage, the input templates describe a website layout, and the output is a static website suitable for browsing locally, or hosting on a web server.
 
 Since the output is always static text files, Itsy-Gitsy can generate more than just websites.  With custom templates, it can render your Git repositories as plain text, CSV, LaTeX, org-mode, Markdown, TOML, or whatever format you desire.
 
