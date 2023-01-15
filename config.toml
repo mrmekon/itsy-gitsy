@@ -487,6 +487,7 @@ cloned_repos  = "cloned_repos/"
 ###############################################################################
 [gitsy_extra]
 generated_by = "Itsy-Gitsy"
+generated_by_url = "https://git.trevorbentley.com/itsy-gitsy/"
 #global_user_defined_var = "whatever"
 #these_can_also_be_numbers = 5
 #or_bools = true
