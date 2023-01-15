@@ -128,7 +128,7 @@ table.summary-table tr:nth-child(even), table.repo-list tr:nth-child(even) {
     background-color: var(--offerwhite);
 }
 table.repo-list td {
-    padding: 0.5em 0.3em 0.5em 0.3em;
+    padding: 0.3em 0.3em 0.3em 0.3em;
 }
 table.summary-table td, table.repo-list td {
     word-break: break-all;

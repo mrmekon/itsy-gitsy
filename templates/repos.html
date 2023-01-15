@@ -14,7 +14,7 @@
     <th>Website</th>
     <th>Last Updated</th>
   </tr>
-  {% for repo in repos | sort(attribute="name") -%}
+  {% for repo in repos | sort(attribute="last_ts_utc") | reverse  -%}
   <tr>
     <td class="repo"><a href="{{repo.name}}/summary.html">{{ repo.name }}</a></td>
     <td class="description nosmall">{{repo.metadata.description}}</td>

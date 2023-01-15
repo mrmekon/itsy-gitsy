@@ -15,6 +15,8 @@ fn first_line(msg: &[u8]) -> String {
 #[derive(Serialize, Default)]
 pub struct GitRepo {
     pub name: String,
+    pub last_ts_utc: i64,
+    pub last_ts_offset: i64,
     pub metadata: GitsyMetadata,
     pub history: Vec<GitObject>,
     pub branches: Vec<GitObject>,
@@ -42,6 +44,8 @@ impl GitRepo {
         let all_files: Vec<GitFile> = self.all_files.iter().cloned().take(max_entries).collect();
         GitRepo {
             name: self.name.clone(),
+            last_ts_utc: self.last_ts_utc,
+            last_ts_offset: self.last_ts_offset,
             metadata: self.metadata.clone(),
             history: new_history,
             branches: self.branches.iter().cloned().take(max_entries).collect(),
@@ -452,6 +456,8 @@ pub fn parse_repo(
     let commit_ids = commits.keys().cloned().collect();
     Ok(GitRepo {
         name: name.to_string(),
+        last_ts_utc: history.first().map(|x| x.ts_utc).unwrap_or(0),
+        last_ts_offset: history.first().map(|x| x.ts_offset).unwrap_or(0),
         metadata,
         history,
         branches,
