@@ -79,7 +79,6 @@ $ ./target/release/itsy-gitsy --clean --local --open
 \
 If and when you are ready to move the site to a web server, regenerate it with:
 ```bash
-$ rm -rf rendered/
 $ ./target/release/itsy-gitsy --clean
 ```
 
