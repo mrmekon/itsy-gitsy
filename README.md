@@ -135,6 +135,20 @@ The templates absolutely do not need to be used for their "intended" purposes.  
 
 Any templates that are not specified in the configuration file are not evaluated, and their matching output files are not generated.  Use this to disable any features your site does not require.
 
+### Filters
+
+Tera templates support custom functions and filters, and Itsy-Gitsy defines a few for convenience:
+
+| Name                | Type     | Purpose                                    | Example                                          |
+|---------------------|----------|--------------------------------------------|--------------------------------------------------|
+| only_files          | filter   | Filter the file tree into only files       | {{ all_files \| only_files }}                    |
+| only_dirs           | filter   | Filter the file tree into only directories | {{ all_files \| only_dirs }}                     |
+| hex                 | filter   | Output a number as a hex string            | {{ 17 \| hex }}                                  |
+| oct                 | filter   | Output a number as an octal string         | {{ 17 \| oct }}                                  |
+| mask                | filter   | Bitwise mask a number with another number  | {{ 17 \| mask(mask="0x77") }}                    |
+| ts_to_date          | function | Convert a timestamp and offset to a date   | {{ts_to_date(ts=ts_utc, tz=ts_offset)}}          |
+| ts_to_git_timestamp | function | Same, but print in standard Git format     | {{ts_to_git_timestamp(ts=ts_utc, tz=ts_offset)}} |
+
 ## Security
 
 Security is, for the most part, outsourced to the libraries Itsy-Gitsy depends on.  [git2](https://github.com/rust-lang/git2-rs) handles the security of Git repo access, [Tera](https://tera.netlify.app/) and the templates files themselves handle sanitizing HTML outputs, [pulldown-cmark](https://github.com/raphlinus/pulldown-cmark) handles sanitizing Markdown output, and [syntect](https://github.com/trishume/syntect) handles sanitizing syntax highlighted file contents.  If any of these libraries contain security issues, then so does Itsy Gitsy.
