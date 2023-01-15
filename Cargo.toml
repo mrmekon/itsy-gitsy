@@ -1,6 +1,6 @@
 [package]
 name = "itsy-gitsy"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 authors = ["Trevor Bentley <gitsy@trevorbentley.com>"]
 description = "Static site generator for git repositories"
