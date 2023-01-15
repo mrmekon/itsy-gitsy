@@ -170,6 +170,12 @@ All metadata of all repositories, except for file contents, is held in memory.  
 
 Small repositories with dozens to hundreds of commits can be generated on the order of a few seconds or less.  Large repositories take *considerably* longer; parsing 1,000,000 commits from the Linux kernel repository with `limit_tree_depth = 3`, `limit_context = 10` and `limit_diffs = 100` took ~30 minutes on a fast laptop, and produced a ~2GB website.
 
+## Limitations
+
+* Only indexes history of one branch.
+* No permalinks.  Links to file contents are invalidated if the file changes.
+* High memory usage for large repositories.
+* Limited to the pre-defined set of input templates.
 
 ## Main Dependencies
 
