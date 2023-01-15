@@ -442,8 +442,8 @@ error        = "404.html"
 ###############################################################################
 [gitsy_outputs]
 path = "rendered/"
-repo_list     = "repos.html"
-repo_summary  = "%REPO%/summary.html"
+repo_list     = "index.html"
+repo_summary  = "%REPO%/index.html"
 history       = "%REPO%/history%PAGE%.html"
 commit        = "%REPO%/commit/%ID%.html"
 branches      = "%REPO%/branches%PAGE%.html"

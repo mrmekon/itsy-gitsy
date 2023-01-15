@@ -198,8 +198,8 @@ macro_rules! output_path_fn {
 
 #[rustfmt::skip]
 impl GitsySettingsOutputs {
-    output_path_fn!(repo_list,       GitObject, full_hash, false, "repos.html");
-    output_path_fn!(repo_summary,    GitObject, full_hash, false, "%REPO%/summary.html");
+    output_path_fn!(repo_list,       GitObject, full_hash, false, "index.html");
+    output_path_fn!(repo_summary,    GitObject, full_hash, false, "%REPO%/index.html");
     output_path_fn!(history,         GitObject, full_hash, false, "%REPO%/history%PAGE%.html");
     output_path_fn!(commit,          GitObject, full_hash, false, "%REPO%/commit/%ID%.html");
     output_path_fn!(branches,        GitObject, full_hash, false, "%REPO%/branches%PAGE%.html");

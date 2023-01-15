@@ -7,7 +7,7 @@
 {% block tab_files_selected -%}selected{% endblock -%}
 
 {% block subheader -%}
-<div class="breadcrumbs"><span class="site-title"><a href="{{ root_url | safe }}/repos.html">{{site_name | default(value="Itsy-Gitsy") }}</a></span>{% if name -%}&nbsp;&gt;&gt;&nbsp;<span class="site-title">{{ name }}</span>{% endif -%}&nbsp;&gt;&gt;&nbsp;<span class="repo-name">{{ file.path }}</span></div>
+<div class="breadcrumbs"><span class="site-title"><a href="{{ root_url | safe }}/index.html">{{site_name | default(value="Itsy-Gitsy") }}</a></span>{% if name -%}&nbsp;&gt;&gt;&nbsp;<span class="site-title">{{ name }}</span>{% endif -%}&nbsp;&gt;&gt;&nbsp;<span class="repo-name">{{ file.path }}</span></div>
 {% endblock -%}
 
 {% block content %}

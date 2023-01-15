@@ -40,7 +40,7 @@
 {% if repo_url -%}
 <table class='tabs'>
   <tr>
-    <td class="tab {% block tab_summary_selected -%}{% endblock -%} "><a href='{{ repo_url | safe }}/summary.html'  class="tab">summary</a></td>
+    <td class="tab {% block tab_summary_selected -%}{% endblock -%} "><a href='{{ repo_url | safe }}/index.html'  class="tab">summary</a></td>
     <td class="tab {% block tab_history_selected -%}{% endblock -%} "><a href='{{ repo_url | safe }}/history.html'  class="tab">history</a></td>
     <td class="tab {% block tab_branches_selected -%}{% endblock -%}"><a href='{{ repo_url | safe }}/branches.html' class="tab">branches</a></td>
     <td class="tab {% block tab_tags_selected -%}{% endblock -%}    "><a href='{{ repo_url | safe }}/tags.html'     class="tab">tags</a></td>
