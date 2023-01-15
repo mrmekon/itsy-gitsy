@@ -459,9 +459,15 @@ tags          = "%REPO%/tags%PAGE%.html"
 tag           = "%REPO%/tag/%ID%.html"
 files         = "%REPO%/files.html"
 file          = "%REPO%/file/%ID%.html"
-syntax_css    = "%REPO%/file/syntax.css"
 dir           = "%REPO%/dir/%ID%.html"
 error         = "404.html"
+
+# Output file for syntax highlighting CSS
+#
+# If syntax highlighting is enabled, a single CSS file will be
+# rendered to this path.  It must be included in the file template to
+# render the syntax highlighting correctly.
+syntax_css    = "%REPO%/file/syntax.css"
 
 # Output directory for files specified in global `asset_files`.
 #
