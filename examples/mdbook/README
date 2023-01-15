@@ -1,0 +1,11 @@
+This example renders a few git repositories as an mdBook with Itsy-Gitsy.
+
+You'll need to have Itsy-Gitsy and mdbook available.  Update the
+commands below to use absolute paths, if necessary.
+
+Build the book with:
+
+$ itsy-gitsy -c mdbook.toml --clean --local
+$ mdbook serve rendered/
+
+And navigate to http://localhost:3000/ to view.  That's it!

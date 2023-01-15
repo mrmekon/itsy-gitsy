@@ -1,0 +1,10 @@
+# Summary
+
+# Git Repositories
+
+{% for repo in repos | sort(attribute="name") | reverse  -%}
+- [{{repo.name}}]({{repo.name}}/about.md)
+  - [history]({{repo.name}}/history.md)
+  - [branches]({{repo.name}}/branches.md)
+  - [tags]({{repo.name}}/tags.md)
+{% endfor -%}

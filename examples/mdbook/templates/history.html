@@ -1,0 +1,7 @@
+# {{name}} -- Commits
+
+| Hash | Summary |
+| --- | --- |
+{% for entry in history -%}
+| {{entry.short_hash}} | ({{entry.summary}}) |
+{% endfor -%}

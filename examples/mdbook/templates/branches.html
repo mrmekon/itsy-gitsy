@@ -1,0 +1,7 @@
+# {{name}} -- Branches
+
+| Branch | Hash | Summary |
+| --- | --- | --- |
+{% for entry in branches | sort(attribute="ts_utc") | reverse -%}
+| {{entry.ref_name}} | {{entry.short_hash}} | ({{entry.summary}}) |
+{% endfor -%}

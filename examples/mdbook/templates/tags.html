@@ -1,0 +1,7 @@
+# {{name}} -- Tags
+
+| Tag | Hash | Summary |
+| --- | --- | --- |
+{% for entry in tags | sort(attribute="ts_utc") | reverse -%}
+| {{entry.ref_name}} | {{entry.short_hash}} | ({{entry.summary}}) |
+{% endfor -%}

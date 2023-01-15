@@ -1,0 +1,9 @@
+This example demonstrates generating a CSV spreadsheet from a few git
+repositories using Itsy-Gitsy.
+
+Generate with:
+
+$ itsy-gitsy -c csv.toml --clean --local
+
+Then open "rendered/repos.csv" with a text editor or spreadsheet
+application.

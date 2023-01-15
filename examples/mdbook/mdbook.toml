@@ -1,0 +1,42 @@
+###############################################################################
+##
+## Minimal configuration to generate an "mdBook"
+##
+###############################################################################
+
+render_markdown = false
+syntax_highlight = false
+asset_files = ["book.toml"]
+
+[gitsy_templates]
+path = "templates/"
+repo_list    = "sidebar.html"
+repo_summary = "repo.html"
+history      = "history.html"
+branches     = "branches.html"
+tags         = "tags.html"
+
+[gitsy_outputs]
+path = "rendered/"
+repo_list     = "src/SUMMARY.md"
+repo_summary  = "src/%REPO%/about.md"
+history       = "src/%REPO%/history.md"
+branches      = "src/%REPO%/branches.md"
+tags          = "src/%REPO%/tags.md"
+global_assets = ""
+cloned_repos  = "cloned_repos/"
+
+[connectr]
+path = "https://github.com/mrmekon/connectr"
+website = "https://github.com/mrmekon/connectr"
+description = "A super lightweight Spotify controller"
+
+[tempest-cljs]
+path = "https://github.com/mrmekon/tempest-cljs"
+website = "https://github.com/mrmekon/tempest-cljs"
+description = "Tempest arcade game, in ClojureScript, hosted on Noir"
+
+[picdb]
+path = "https://github.com/mrmekon/picdb"
+website = "https://github.com/mrmekon/picdb"
+description = "Command-line debugger for Microchip PIC processors"

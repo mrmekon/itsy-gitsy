@@ -1,0 +1,11 @@
+# {{name}} -- Overview
+
+{{metadata.description}}
+
+## Recent commits (10 of {{history | length}})
+
+{% for entry in history -%}
+{% if loop.index0 < 10  -%}
+- {{entry.short_hash}}: {{entry.summary}}
+{% endif -%}
+{% endfor -%}
