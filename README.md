@@ -175,6 +175,7 @@ Small repositories with dozens to hundreds of commits can be generated on the or
 * No permalinks.  Links to file contents are invalidated if the file changes.
 * High memory usage for large repositories.
 * Limited to the pre-defined set of input templates.
+* Leaves output in unknown, partial state in case of errors.
 
 ## Main Dependencies
 

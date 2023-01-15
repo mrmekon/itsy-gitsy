@@ -265,10 +265,13 @@ pub fn parse_repo(
     for refr in repo.references()? {
         let refr = refr?;
         if let (Some(target), Some(name)) = (refr.target(), refr.shorthand()) {
-            let id = target.to_string();
+            let id = match refr.peel_to_tag() {
+                Ok(tag) => tag.target_id().to_string(),
+                _ => target.to_string(),
+            };
             match references.contains_key(&id) {
                 false => {
-                    references.insert(target.to_string(), vec![name.to_string()]);
+                    references.insert(id, vec![name.to_string()]);
                 }
                 true => {
                     references.get_mut(&id).unwrap().push(name.to_string());
