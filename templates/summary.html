@@ -18,7 +18,11 @@
   </tr>
   <tr class="website">
     <td class="field website">Website:</td>
+    {% if metadata.website -%}
+    <td class="value website"><a href="{{ metadata.website }}">{{metadata.website | default(value="[none]")}}</a></td>
+    {% else -%}
     <td class="value website">{{metadata.website | default(value="[none]")}}</td>
+    {% endif-%}
   </tr>
   <tr class="clone">
     <td class="field clone">Clone URL:</td>
