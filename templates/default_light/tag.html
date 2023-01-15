@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block tab_tags_selected -%}selected{% endblock -%}
+
+{% block content %}
+<div class="tag-page">
+  <table class="tag-header">
+    <tr class="header"><td class="field">tag:</td><td class="value">{{tag.ref_name}}</td></tr>
+    <tr class="header"><td class="field">hash:</td><td class="value">{{tag.full_hash}}</td></tr>
+    <tr class="header"><td class="field">tagged commit:</td><td class="value">{% if tag.tagged_id -%}{% if tag.tagged_id in commits -%}<a href="{{repo_url | safe}}/commit/{{tag.tagged_id}}.html">{{tag.tagged_id}}</a>{% else -%}{{tag.tagged_id}}{% endif -%}{% endif -%}</td></tr>
+    <tr class="header"><td class="field">author:</td><td class="value">{{tag.author.name}} <{{tag.author.email}}></td></tr>
+    <tr class="header"><td class="field">date:</td><td class="value">{{ts_to_git_timestamp(ts=tag.ts_utc, tz=tag.ts_offset)}}</td></tr>
+  </table>
+  <div class="tag-message"><pre>{{tag.message}}</pre></div>
+</div>
+{% endblock content %}

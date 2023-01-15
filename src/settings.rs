@@ -127,6 +127,15 @@ pub struct GitsySettingsTemplates {
     pub error: Option<String>,
 }
 
+impl GitsySettingsTemplates {
+    pub fn template_dir(&self) -> String {
+        self.path.clone().canonicalize()
+            .expect(&format!("ERROR: unable to canonicalize template path: {}", self.path.display()))
+            .to_str().expect(&format!("ERROR: unable to parse template path: {}", self.path.display()))
+            .to_string()
+    }
+}
+
 #[derive(Deserialize, Debug)]
 pub struct GitsySettingsOutputs {
     pub path: PathBuf,

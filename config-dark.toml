@@ -157,7 +157,7 @@ syntax_highlight = true
 # - `Solarized (dark)`
 # - `Solarized (light)`
 #
-syntax_highlight_theme = "base16-ocean.light"
+syntax_highlight_theme = "base16-ocean.dark"
 
 # Limits maximum number of history items (i.e. git log) to parse.
 #
@@ -314,7 +314,7 @@ syntax_highlight_theme = "base16-ocean.light"
 #
 # All files with a .html extension found under this directory, and its
 # immediate children directories, are imported into the Tera template engine.
-path = "templates/default_light/"
+path = "templates/default_dark/"
 
 # Template responsible for the list of repositories.
 #

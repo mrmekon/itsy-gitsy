@@ -31,7 +31,8 @@ use settings::{GitsyCli, GitsySettings};
 
 // TODO:
 //
-//   * basic, light, dark, and fancy default themes
+//   * favicon
+//   * permalinks (at least for README?)
 //   * better error propagation
 //   * automated tests
 //   * documentation + examples

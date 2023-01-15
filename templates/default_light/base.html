@@ -1,0 +1,61 @@
+<html>
+<head>
+{% set head_title = site_name | default(value="Itsy-Gitsy") -%}
+{% set head_description = metadata.description | default(value=site_description | default(value="Static Git repository listings")) -%}
+{% set root_url = site_url | default(value=site_dir) -%}
+{% if name -%}
+{% set repo_url = root_url ~ "/" ~ name -%}
+{% set head_title = head_title ~ " -- " ~ name -%}
+{% endif -%}
+{% set asset_url = root_url ~ "/" ~ site_assets -%}
+{% set head_url = repo_url | default(value=root_url) -%}
+
+{% block html_head -%}
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="HandheldFriendly" content="True" />
+  <title>{{head_title}}</title>
+  <meta name="description" content="{{ head_description }}">
+  <meta name="og:title" content="{{head_title}}">
+  <meta name="og:url" content="{{ head_url | safe }}">
+  <meta name="og:description" content="{{ head_description }}">
+  <meta name="og:type" content="website">
+  <link rel="canonical" href="{{ head_url | safe }}">
+  <link rel="stylesheet" type="text/css" href="{{ asset_url | safe }}/style.css" />
+{% block html_head_extra -%}
+{% endblock html_head_extra -%}
+{% endblock html_head -%}
+</head>
+
+<body>
+{% block header -%}{% include "header.html" -%}{% endblock header -%}
+
+<div class="main">
+
+<div class="subheader">
+{% block subheader -%}{% include "subheader.html" -%}{% endblock subheader -%}
+</div>
+
+{% if repo_url -%}
+<table class='tabs'>
+  <tr>
+    <td class="tab {% block tab_summary_selected -%}{% endblock -%} "><a href='{{ repo_url | safe }}/index.html'  class="tab">summary</a></td>
+    <td class="tab {% block tab_history_selected -%}{% endblock -%} "><a href='{{ repo_url | safe }}/history.html'  class="tab">history</a></td>
+    <td class="tab {% block tab_branches_selected -%}{% endblock -%}"><a href='{{ repo_url | safe }}/branches.html' class="tab">branches</a></td>
+    <td class="tab {% block tab_tags_selected -%}{% endblock -%}    "><a href='{{ repo_url | safe }}/tags.html'     class="tab">tags</a></td>
+    <td class="tab {% block tab_files_selected -%}{% endblock -%}   "><a href='{{ repo_url | safe }}/files.html'    class="tab">files</a></td>
+    <td class="padding"></td>
+  </tr>
+</table>
+{% endif -%}
+
+<div class="content">
+{% block content %}{% endblock content %}
+</div>
+
+</div>
+
+{% block footer -%}{% include "footer.html" -%}{% endblock footer -%}
+</body>
+</html>

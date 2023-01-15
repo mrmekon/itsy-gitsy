@@ -1,0 +1,362 @@
+:root {
+    --greyblue: #dee2ea;
+    --greyblue: #60738c;
+    --greypink: #e0deea;
+    --greypink: #c0d2dd;
+    --greypink: #dbdcdd;
+    --offwhite: #f4f4f4;
+    --offerwhite: #e9e9e9;
+    --deepred: #770000;
+    --deepblue: #3002e8;
+    --nearwhite: #fafafa;
+    --nearblack: #222222;
+    --borderverylight: #ddd;
+    --borderlight: #bbb;
+    --borderdark: #888;
+}
+body {
+    height: 100%;
+    margin: 0;
+    min-height: 100%;
+    font-family: monospace,monospace;
+    -ms-text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+    line-height: 1.5;
+    background-color: var(--nearwhite);
+    color: var(--nearblack);
+}
+div {
+    color: var(--nearblack);
+}
+div.banner {
+    width: 95%;
+    max-width: 100rem;
+    color: var(--offwhite);
+    background-color: var(--greyblue);
+    border-radius: 0 0 30px 30px;
+    font-family: sans-serif;
+    text-align: center;
+    margin: 0 auto 0 auto;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+}
+div.breadcrumbs {
+    background-color: var(--greypink);
+    font-weight: bold;
+    padding: 0.5em;
+    border-radius: 10px 10px 0 0;
+}
+div.breadcrumbs a {
+    color: var(--nearblack);
+    text-decoration: none;
+}
+div.breadcrumbs span.site-title {
+    font-size: 1rem;
+}
+div.breadcrumbs span.repo-name {
+    font-size: 1.5rem;
+}
+div.site-title {
+    letter-spacing: .1em;
+    font-size: 2.5rem;
+    font-weight: bold;
+}
+div.site-description {
+    min-height: 1.5em;
+}
+a {
+    word-wrap: break-word;
+    background-color: transparent;
+    color: var(--deepblue);
+    transition: opacity .1s;
+}
+a:hover {
+    opacity: 0.5;
+}
+a.disabled {
+    pointer-events: none;
+    color: var(--nearblack);
+}
+div.main {
+    width: 95%;
+    max-width: 100rem;
+    margin: 0 auto 0 auto;
+}
+div.content {
+    padding: 1em 0 1em 0;
+}
+table {
+    width: 100%;
+}
+table.tabs {
+    padding: 0 0 0 0;
+    margin: 0 auto 0 auto;
+    background-color: var(--offwhite);
+    border-radius: 0 0 3px 3px;
+    border-bottom: solid 3px var(--borderlight);
+    border-spacing: 0;
+}
+table.tabs td.tab {
+    text-align: center;
+    min-width: 8em;
+    border-right: solid 1px var(--borderdark);
+}
+table.tabs td.padding {
+    width: 100%;
+}
+table.tabs a {
+    color: var(--deepred);
+    text-decoration: none;
+    letter-spacing: .1em;
+    font-weight: bold;
+}
+table.tabs td.selected {
+    background-color: var(--greyblue);
+    background-color: #ede5de;
+    background-color: var(--greypink);
+}
+table.summary-table, table.repo-list {
+    width: 100%;
+    max-width: 100%;
+    background-color: var(--offwhite);
+    border-radius: 8px;
+}
+table.summary-table th, table.repo-list th {
+    text-align: left;
+    padding-left: 0.3em;
+}
+table.summary-table tr:nth-child(even), table.repo-list tr:nth-child(even) {
+    background-color: var(--offerwhite);
+}
+table.repo-list td {
+    padding: 0.3em 0.3em 0.3em 0.3em;
+}
+table.summary-table td, table.repo-list td {
+    word-break: break-all;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-left: 0.3em;
+}
+table.repo-list col.repo {
+    width: 12rem;
+}
+table.repo-list td.description {
+    max-width: 40em;
+}
+table.repo-list col.description {
+    width: 30rem;
+}
+table.repo-list col.website {
+    width: 7em;
+    max-width: 7em;
+}
+table.repo-list col.updated {
+    width: 10em;
+    max-width: 10em;
+}
+table.summary-table col.oid {
+    width: 7em;
+    max-width: 7em;
+}
+table.summary-table col.date {
+    width: 9em;
+    max-width: 9em;
+}
+table.summary-table col.diff {
+    width: 9em;
+    max-width: 9em;
+}
+table.summary-table col.msg {
+    width: 30rem;
+}
+table.summary-table col.refs {
+    width: 25rem;
+}
+table.summary-table col.branch {
+    width: 30em;
+}
+table.summary-table col.tag {
+    width: 30em;
+}
+table.summary-table col.type {
+    width: 7em;
+    max-width: 7em;
+}
+table.summary-table col.mode {
+    width: 7em;
+    max-width: 7em;
+}
+table.summary-table col.size {
+    width: 7em;
+    max-width: 7em;
+}
+table.summary-table td.msg {
+    max-width: 10em;
+}
+table.summary-table td.refs {
+    font-size: 0.8rem;
+}
+table.summary-table span.ref {
+    color: var(--offwhite);
+    background-color: var(--greyblue);
+    border-radius: 10px;
+    margin-right: 1em;
+    padding: 0 0.5em 0 0.5em;
+}
+table.summary-table td.sans {
+    font-family: sans-serif;
+}
+div.summary-header {
+    color: var(--offwhite);
+    letter-spacing: 0.05em;
+    background-color: var(--greyblue);
+    font-size: 1.4rem;
+    font-weight: bold;
+    text-align: center;
+    text-transform: uppercase;
+    margin-top: 2rem;
+    border-bottom: solid 1px var(--borderdark);
+    border-radius: 10px 10px 0 0;
+}
+div.full-header {
+    color: var(--offwhite);
+    letter-spacing: 0.05em;
+    background-color: var(--greyblue);
+    font-size: 1.4rem;
+    font-weight: bold;
+    text-align: center;
+    text-transform: uppercase;
+    margin-top: 0rem;
+    border-bottom: solid 1px var(--borderdark);
+    border-radius: 10px 10px 0 0;
+}
+div.nocap-header {
+    color: var(--offwhite);
+    letter-spacing: 0.05em;
+    background-color: var(--greyblue);
+    font-size: 1.4rem;
+    font-weight: bold;
+    text-align: center;
+    margin-top: 0rem;
+    border-bottom: solid 1px var(--borderdark);
+    border-radius: 10px 10px 0 0;
+}
+hr {
+    border-color: var(--borderverylight);
+}
+div.footer {
+    margin-top: 1em;
+    padding-bottom: 2em;
+    text-align: center;
+    font-size: 0.9rem;
+}
+nav.paginate {
+    text-align: center;
+    margin-top: 2em;
+}
+nav.paginate span.paginate {
+    margin: 0 5em 0 5em;
+}
+nav.paginate a.disabled {
+    text-decoration: none;
+    color: var(--borderlight);
+}
+div.file-contents {
+    background-color: var(--offwhite);
+    font-size: 1rem;
+    overflow: visible;
+    padding: 0 0.5em 0 0.5em;
+}
+div.commit-page, div.branch-page, div.tag-page {
+    background-color: var(--offwhite);
+    font-size: 1rem;
+    overflow: visible;
+}
+table.commit-header, table.branch-header, table.tag-header {
+    width: 100%;
+    background-color: var(--offerwhite);
+    background-color: var(--greypink);
+    border-radius: 10px 10px 0 0;
+    padding: 0.5em;
+    border-bottom: solid 2px var(--borderlight);
+}
+table.commit-header td.field, table.branch-header td.field, table.tag-header td.field {
+    width: 10em;
+    font-weight: bold;
+}
+div.commit-message {
+    padding: 1em 0.5em 2em 0.5em;
+    border-bottom: solid 2px var(--borderlight);
+}
+div.branch-message, div.tag-message {
+    padding: 1em 0.5em 2em 0.5em;
+}
+div.commit-diff {
+    padding: 0.5em;
+}
+div.commit-diff-header {
+    font-weight: bold;
+}
+div.commit span.hunk-header {
+    font-weight: bold;
+}
+div.commit-diff-header pre, div.branch-page pre, div.tag-page pre {
+    padding: 0;
+    margin: 0;
+}
+div.commit-page span.add {
+    color: #00aa00;
+}
+div.commit-page span.del {
+    color: #bb0000;
+}
+@media screen and (max-width:50em) {
+    body, table, div {
+        font-size: 0.8rem;
+    }
+    div.footer {
+        font-size: 0.7rem;
+    }
+    col.nosmall, td.nosmall, th.nosmall {
+        display: none;
+        visibility: hidden;
+    }
+    table.tabs td.tab {
+        min-width: 0em;
+        padding: 0 0.3em 0 0.3em;
+    }
+    div.file-contents {
+        font-size: 0.7rem;
+    }
+    div.breadcrumbs span.site-title {
+        font-size: 0.7rem;
+    }
+    div.breadcrumbs span.repo-name {
+        font-size: 0.9rem;
+    }
+}
+table.links {
+    width: 100%;
+}
+table.links td.field {
+    font-weight: bold;
+    width: 10rem;
+}
+table.links td.value {
+    text-align: left;
+}
+div.file-contents pre {
+    background-color: var(--offerwhite);
+    padding: 0.2em 0.5em 0.2em 0.5em;
+}
+div.file-contents table {
+    border-collapse: true;
+    font-size: 1rem;
+}
+div.file-contents table th {
+    border-bottom: 1px solid;
+}
+div.file-contents table td {
+    padding: 0.2em 0.5em 0.2em 0.5em;
+}

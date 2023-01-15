@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block tab_branches_selected -%}selected{% endblock -%}
+
+{% block content %}
+<div class="full-header branches">Branches</div>
+<table class="summary-table branches">
+  <colgroup>
+    <col class="branch" />
+    <col class="oid" />
+    <col class="msg nosmall" />
+    <col class="author" />
+    <col class="date" />
+  </colgroup>
+  <tr>
+    <th>Branch</th>
+    <th>Commit</th>
+    <th class="nosmall">Message</th>
+    <th>Author</th>
+    <th>Date</th>
+  </tr>
+  {% for entry in branches -%}
+  <tr class="branch">
+    <td class="name"><a href="branch/{{entry.full_hash}}.html">{{entry.ref_name}}</a></td>
+    <td class="oid">{{entry.short_hash}}</td>
+    <td class="msg sans nosmall">{{entry.summary}}</td>
+    <td class="author sans">{{entry.author.name}}</td>
+    <td class="date">{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}</td>
+  </tr>
+  {% endfor -%}
+</table>
+<nav class="paginate" role="navigation">
+  <a class="paginate {% if not page.prev_page -%}disabled{% endif -%}" href="{{ page.prev_page }}">&lt; prev page</a>
+  <span class="paginate">[page {{ page.page_idx }} of {{ page.pages }}]</span>
+  <a class="paginate {% if not page.next_page -%}disabled{% endif -%}" href="{{ page.next_page }}">next page &gt;</a>
+</nav>
+{% endblock content %}

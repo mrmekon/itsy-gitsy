@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+<table class="repo-list">
+  <colgroup>
+    <col class="repo" />
+    <col class="description nosmall" />
+    <col class="website" />
+    <col class="updated" />
+  </colgroup>
+  <tr>
+    <th>Repository</th>
+    <th class="nosmall">Description</th>
+    <th>Website</th>
+    <th>Last Updated</th>
+  </tr>
+  {% for repo in repos | sort(attribute="last_ts_utc") | reverse  -%}
+  <tr>
+    <td class="repo"><a href="{{repo.name}}/index.html">{{ repo.name }}</a></td>
+    <td class="description nosmall">{{repo.metadata.description}}</td>
+    <td class="website">{% if repo.metadata.website -%}<a href="{{repo.metadata.website}}">link</a>{% endif -%}</td>
+    <td class="date">{{ts_to_date(ts=repo.history[0].ts_utc, tz=repo.history[0].ts_offset)}}</td>
+  </tr>
+{% endfor -%}
+</table>
+{% endblock content %}

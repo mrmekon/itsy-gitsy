@@ -631,7 +631,9 @@ impl GitsyGenerator {
             if repo_desc.asset_files.is_some() {
                 let target_dir = self.settings.outputs.repo_assets(Some(&parsed_repo), None);
                 for src_file in repo_desc.asset_files.as_ref().unwrap() {
-                    let src_file = PathBuf::from(repo_path.to_owned() + "/" + src_file);
+                    let src_file = src_file.replace("%TEMPLATE%", &self.settings.templates.template_dir());
+                    let src_file = src_file.replace("%REPO%", &repo_path);
+                    let src_file = PathBuf::from(repo_path.to_owned() + "/" + &src_file);
                     let mut dst_file = PathBuf::from(&target_dir);
                     dst_file.push(src_file.file_name().expect(&format!(
                         "Failed to copy repo asset file: {} ({})",
@@ -646,6 +648,7 @@ impl GitsyGenerator {
                     if let Ok(meta) = std::fs::metadata(dst_file) {
                         repo_bytes += meta.len() as usize;
                     }
+                    loud!(" - copied asset: {}", src_file.display());
                 }
             }
 
@@ -719,6 +722,7 @@ impl GitsyGenerator {
         if self.settings.asset_files.is_some() {
             let target_dir = self.settings.outputs.global_assets(None, None);
             for src_file in self.settings.asset_files.as_ref().unwrap() {
+                let src_file = src_file.replace("%TEMPLATE%", &self.settings.templates.template_dir());
                 let src_file = PathBuf::from(src_file);
                 let mut dst_file = PathBuf::from(&target_dir);
                 dst_file.push(
@@ -731,6 +735,7 @@ impl GitsyGenerator {
                 if let Ok(meta) = std::fs::metadata(dst_file) {
                     global_bytes += meta.len() as usize;
                 }
+                loud!(" - copied asset: {}", src_file.display());
             }
         }
 

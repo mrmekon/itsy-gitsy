@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block tab_history_selected -%}selected{% endblock -%}
+
+{% block content %}
+<div class="full-header commit">History</div>
+<table class="summary-table commits">
+  <colgroup>
+    <col class="oid" />
+    <col class="msg" />
+    <col class="author" />
+    <col class="date" />
+    <col class="diff nosmall" />
+    <col class="refs nosmall" />
+  </colgroup>
+  <tr>
+    <th>Commit</th>
+    <th>Message</th>
+    <th>Author</th>
+    <th>Date</th>
+    <th class="nosmall">Diff</th>
+    <th class="nosmall">Refs</th>
+  </tr>
+  {% for entry in history -%}
+  <tr class="commit">
+    <td class="oid">{% if entry.full_hash in commit_ids -%}<a href="commit/{{entry.full_hash}}.html">{{entry.short_hash}}</a>{% else -%}{{entry.short_hash}}{% endif -%}</td>
+    <td class="msg sans">{{entry.summary}}</td>
+    <td class="author sans">{{entry.author.name}}</td>
+    <td class="date">{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}</td>
+    <td class="diff nosmall">{% if entry.stats -%}{{entry.stats.files}} (+{{entry.stats.additions}}/-{{entry.stats.deletions}}){% endif -%}</td>
+    <td class="refs nosmall">{%- for ref in entry.alt_refs -%}{%- if loop.index0 < 3 -%}<span class="ref">{{ref}}</span>{%- endif -%}{%- endfor -%}{% if entry.alt_refs | length > 3 -%}<span class="ref">...</span>{% endif -%}</td>
+  </tr>
+{% endfor -%}
+</table>
+<nav class="paginate" role="navigation">
+  <a class="paginate {% if not page.prev_page -%}disabled{% endif -%}" href="{{ page.prev_page }}">&lt; prev page</a>
+  <span class="paginate">[page {{ page.page_idx }} of {{ page.pages }}]</span>
+  <a class="paginate {% if not page.next_page -%}disabled{% endif -%}" href="{{ page.next_page }}">next page &gt;</a>
+</nav>
+{% endblock content %}
