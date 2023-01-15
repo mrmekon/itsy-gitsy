@@ -1,0 +1,6 @@
+"Repository", "Date", "Hash", "Summary", "Author", "Additions", "Deletions"
+{% for repo in repos | sort(attribute="last_ts_utc") | reverse  -%}
+{% for entry in repo.history -%}
+"{{repo.name}}", "{{ts_to_date(ts=entry.ts_utc, tz=entry.ts_offset)}}", "{{entry.short_hash}}", "{{entry.summary | truncate(length=79)}}", "{{entry.author.name}}", {{entry.stats.additions}}, {{entry.stats.deletions}}
+{% endfor -%}
+{% endfor -%}
