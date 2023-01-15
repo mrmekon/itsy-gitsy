@@ -114,7 +114,7 @@ impl GitsyCli {
 pub struct GitsySettingsTemplates {
     pub path: PathBuf,
     pub repo_list: Option<String>,
-    pub repo_summary: Option<String>,
+    pub summary: Option<String>,
     pub history: Option<String>,
     pub commit: Option<String>,
     pub branches: Option<String>,
@@ -141,7 +141,7 @@ pub struct GitsySettingsOutputs {
     pub path: PathBuf,
     pub cloned_repos: Option<String>,
     pub repo_list: Option<String>,
-    pub repo_summary: Option<String>,
+    pub summary: Option<String>,
     pub history: Option<String>,
     pub commit: Option<String>,
     pub branches: Option<String>,
@@ -208,7 +208,7 @@ macro_rules! output_path_fn {
 #[rustfmt::skip]
 impl GitsySettingsOutputs {
     output_path_fn!(repo_list,       GitObject, full_hash, false, "index.html");
-    output_path_fn!(repo_summary,    GitObject, full_hash, false, "%REPO%/index.html");
+    output_path_fn!(summary,         GitObject, full_hash, false, "%REPO%/index.html");
     output_path_fn!(history,         GitObject, full_hash, false, "%REPO%/history%PAGE%.html");
     output_path_fn!(commit,          GitObject, full_hash, false, "%REPO%/commit/%ID%.html");
     output_path_fn!(branches,        GitObject, full_hash, false, "%REPO%/branches%PAGE%.html");

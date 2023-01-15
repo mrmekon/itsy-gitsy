@@ -331,15 +331,15 @@ repo_list    = "repos.html"
 # data (commits, branches, etc) available.
 #
 # This template executes one time per repository.
-repo_summary = "summary.html"
+summary = "summary.html"
 
 # Template responsible for displaying the commit history.
 #
-# This template is evaluated with the same data as `repo_summary`.  If
-# the `paginate_history` setting is non-zero, this may be called
-# several times with the `history` template variable reduced to the
-# requested page size, and with a `page` template variable provided to
-# identify the current, previous, and next pages.
+# This template is evaluated with the same data as `summary`.  If the
+# `paginate_history` setting is non-zero, this may be called several
+# times with the `history` template variable reduced to the requested
+# page size, and with a `page` template variable provided to identify
+# the current, previous, and next pages.
 #
 # This template executes at least one time per repository, or several
 # times if paginated.
@@ -355,11 +355,11 @@ commit       = "commit.html"
 
 # Template responsible for displaying the repo branches.
 #
-# This template is evaluated with the same data as `repo_summary`.  If
-# the `paginate_branches` setting is non-zero, this may be called
-# several times with the `branches` template variable reduced to the
-# requested page size, and with a `page` template variable provided to
-# identify the current, previous, and next pages.
+# This template is evaluated with the same data as `summary`.  If the
+# `paginate_branches` setting is non-zero, this may be called several
+# times with the `branches` template variable reduced to the requested
+# page size, and with a `page` template variable provided to identify
+# the current, previous, and next pages.
 #
 # This template executes at least one time per repository, or several
 # times if paginated.
@@ -375,8 +375,8 @@ branch       = "branch.html"
 
 # Template responsible for displaying the repo tags.
 #
-# This template is evaluated with the same data as `repo_summary`.  If
-# the `paginate_tags` setting is non-zero, this may be called several
+# This template is evaluated with the same data as `summary`.  If the
+# `paginate_tags` setting is non-zero, this may be called several
 # times with the `tags` template variable reduced to the requested
 # page size, and with a `page` template variable provided to identify
 # the current, previous, and next pages.
@@ -450,7 +450,7 @@ error        = "404.html"
 [gitsy_outputs]
 path = "rendered/"
 repo_list     = "index.html"
-repo_summary  = "%REPO%/index.html"
+summary  = "%REPO%/index.html"
 history       = "%REPO%/history%PAGE%.html"
 commit        = "%REPO%/commit/%ID%.html"
 branches      = "%REPO%/branches%PAGE%.html"

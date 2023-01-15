@@ -381,11 +381,11 @@ impl GitsyGenerator {
                 }
             };
 
-            if let Some(templ_file) = self.settings.templates.repo_summary.as_deref() {
+            if let Some(templ_file) = self.settings.templates.summary.as_deref() {
                 match tera.render(templ_file, &local_ctx) {
                     Ok(rendered) => {
                         repo_bytes +=
-                            self.write_rendered(&self.settings.outputs.repo_summary(Some(&parsed_repo), None), &rendered);
+                            self.write_rendered(&self.settings.outputs.summary(Some(&parsed_repo), None), &rendered);
                     }
                     Err(x) => match x.kind {
                         _ => error!("ERROR: {:?}", x),
