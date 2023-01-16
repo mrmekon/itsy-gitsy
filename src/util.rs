@@ -20,6 +20,8 @@
  * You should have received a copy of the GNU General Public License
  * along with Itsy-Gitsy.  If not, see <http://www.gnu.org/licenses/>.
  */
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 
 pub static VERBOSITY: AtomicUsize = AtomicUsize::new(0);
@@ -129,4 +131,23 @@ impl From<tera::Error> for GitsyError {
     fn from(source: tera::Error) -> Self {
         GitsyError::sourced_kind(GitsyErrorKind::Template, Some(&source.to_string()), source)
     }
+}
+
+pub fn sanitize_path_component(var: &str) -> String {
+    let nasty_chars = r###"<>:"/\|?*&"###.to_string() + "\n\t\0";
+    let mut safe_str = var.to_string();
+    safe_str.retain(|c| !nasty_chars.contains(c));
+    safe_str
+}
+
+pub fn urlify_path(path: &str) -> String {
+    let path = path
+        .replace("/", "+")
+        .replace("\\", "+");
+    path.trim().to_string()
+}
+
+
+pub trait SafePathVar {
+    fn safe_substitute(&self, path: &impl AsRef<Path>) -> PathBuf;
 }

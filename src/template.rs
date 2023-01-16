@@ -24,7 +24,7 @@ use crate::git::GitFile;
 use chrono::{naive::NaiveDateTime, offset::FixedOffset, DateTime};
 use serde::Serialize;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tera::{from_value, to_value, try_get_value, Filter, Function, Value};
 
 fn ts_to_date(ts: i64, offset: Option<i64>, format: Option<String>) -> String {
@@ -180,7 +180,10 @@ pub struct Pagination {
     pub prev_page: Option<String>,
 }
 impl Pagination {
-    pub fn new(cur: usize, total: usize, url_template: &str) -> Self {
+    pub fn new<P: AsRef<Path>>(cur: usize, total: usize, url_template: &P) -> Self {
+        let url_template = url_template.as_ref().to_str()
+            .expect(&format!("ERROR: attempted to paginate unparseable path: {}",
+                             url_template.as_ref().display()));
         let digits = total.to_string().len().max(2);
         let next = match cur + 1 <= total {
             true => Some(cur + 1),

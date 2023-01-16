@@ -145,7 +145,9 @@ impl GitsyGenerator {
         Ok(file)
     }
 
-    fn write_rendered(&self, path: &str, rendered: &str) -> usize {
+    fn write_rendered<P: AsRef<Path>>(&self, path: &P, rendered: &str) -> usize {
+        let path = path.as_ref().to_str()
+            .expect(&format!("ERROR: attempted to write unrecognizeable path: {}", path.as_ref().display()));
         // Ensure that the requested output path is actually a child
         // of the output directory, as a sanity check to ensure we
         // aren't writing out of bounds.
@@ -364,7 +366,7 @@ impl GitsyGenerator {
             }
             local_ctx.insert("site_dir", &self.settings.outputs.output_dir());
             if self.settings.outputs.global_assets.is_some() {
-                local_ctx.insert("site_assets", &self.settings.outputs.to_relative(&self.settings.outputs.global_assets(None, None)));
+                local_ctx.insert("site_assets", &self.settings.outputs.to_relative(&self.settings.outputs.global_assets::<GitFile>(None, None)));
             }
             local_ctx.insert("site_generated_ts", &generated_dt.timestamp());
             local_ctx.insert("site_generated_offset", &generated_dt.offset().local_minus_utc());
@@ -385,7 +387,7 @@ impl GitsyGenerator {
                 match tera.render(templ_file, &local_ctx) {
                     Ok(rendered) => {
                         repo_bytes +=
-                            self.write_rendered(&self.settings.outputs.summary(Some(&parsed_repo), None), &rendered);
+                            self.write_rendered(&self.settings.outputs.summary::<GitFile>(Some(&parsed_repo), None), &rendered);
                     }
                     Err(x) => match x.kind {
                         _ => error!("ERROR: {:?}", x),
@@ -402,7 +404,7 @@ impl GitsyGenerator {
                     let pagination = Pagination::new(
                         idx + 1,
                         page_count,
-                        &self.settings.outputs.branches(Some(&parsed_repo), None),
+                        &self.settings.outputs.branches::<GitFile>(Some(&parsed_repo), None),
                     );
                     paged_ctx.insert("page", &pagination.with_relative_paths());
                     paged_ctx.insert("branches", &page);
@@ -443,7 +445,7 @@ impl GitsyGenerator {
                 let page_count = pages.len();
                 for (idx, page) in pages.enumerate() {
                     let pagination =
-                        Pagination::new(idx + 1, page_count, &self.settings.outputs.tags(Some(&parsed_repo), None));
+                        Pagination::new(idx + 1, page_count, &self.settings.outputs.tags::<GitFile>(Some(&parsed_repo), None));
                     paged_ctx.insert("page", &pagination.with_relative_paths());
                     paged_ctx.insert("tags", &page);
                     match tera.render(templ_file, &paged_ctx) {
@@ -491,7 +493,7 @@ impl GitsyGenerator {
                     let pagination = Pagination::new(
                         idx + 1,
                         page_count,
-                        &self.settings.outputs.history(Some(&parsed_repo), None),
+                        &self.settings.outputs.history::<GitFile>(Some(&parsed_repo), None),
                     );
                     paged_ctx.insert("page", &pagination.with_relative_paths());
                     paged_ctx.insert("history", &page);
@@ -542,7 +544,7 @@ impl GitsyGenerator {
                 let css: String = css_for_theme_with_class_style(theme, syntect::html::ClassStyle::Spaced)
                     .expect("Invalid syntax highlighting theme specified.");
                 repo_bytes +=
-                    self.write_rendered(&self.settings.outputs.syntax_css(Some(&parsed_repo), None), css.as_str());
+                    self.write_rendered(&self.settings.outputs.syntax_css::<GitFile>(Some(&parsed_repo), None), css.as_str());
             }
 
             // TODO: parallelize the rest of the processing steps.  This one is
@@ -620,7 +622,7 @@ impl GitsyGenerator {
                 match tera.render(templ_file, &local_ctx) {
                     Ok(rendered) => {
                         repo_bytes +=
-                            self.write_rendered(&self.settings.outputs.files(Some(&parsed_repo), None), &rendered);
+                            self.write_rendered(&self.settings.outputs.files::<GitFile>(Some(&parsed_repo), None), &rendered);
                     }
                     Err(x) => match x.kind {
                         _ => error!("ERROR: {:?}", x),
@@ -629,7 +631,7 @@ impl GitsyGenerator {
             }
 
             if repo_desc.asset_files.is_some() {
-                let target_dir = self.settings.outputs.repo_assets(Some(&parsed_repo), None);
+                let target_dir = self.settings.outputs.repo_assets::<GitFile>(Some(&parsed_repo), None);
                 for src_file in repo_desc.asset_files.as_ref().unwrap() {
                     let src_file = src_file.replace("%TEMPLATE%", &self.settings.templates.template_dir());
                     let src_file = src_file.replace("%REPO%", &repo_path);
@@ -692,7 +694,7 @@ impl GitsyGenerator {
         }
         global_ctx.insert("site_dir", &self.settings.outputs.output_dir());
         if self.settings.outputs.global_assets.is_some() {
-            global_ctx.insert("site_assets", &self.settings.outputs.to_relative(&self.settings.outputs.global_assets(None, None)));
+            global_ctx.insert("site_assets", &self.settings.outputs.to_relative(&self.settings.outputs.global_assets::<GitFile>(None, None)));
         }
         global_ctx.insert("site_generated_ts", &generated_dt.timestamp());
         global_ctx.insert("site_generated_offset", &generated_dt.offset().local_minus_utc());
@@ -700,7 +702,7 @@ impl GitsyGenerator {
         if let Some(templ_file) = self.settings.templates.repo_list.as_deref() {
             match tera.render(templ_file, &global_ctx) {
                 Ok(rendered) => {
-                    global_bytes += self.write_rendered(&self.settings.outputs.repo_list(None, None), &rendered);
+                    global_bytes += self.write_rendered(&self.settings.outputs.repo_list::<GitFile>(None, None), &rendered);
                 }
                 Err(x) => match x.kind {
                     _ => error!("ERROR: {:?}", x),
@@ -711,7 +713,7 @@ impl GitsyGenerator {
         if let Some(templ_file) = self.settings.templates.error.as_deref() {
             match tera.render(templ_file, &global_ctx) {
                 Ok(rendered) => {
-                    global_bytes += self.write_rendered(&self.settings.outputs.error(None, None), &rendered);
+                    global_bytes += self.write_rendered(&self.settings.outputs.error::<GitFile>(None, None), &rendered);
                 }
                 Err(x) => match x.kind {
                     _ => error!("ERROR: {:?}", x),
@@ -720,7 +722,7 @@ impl GitsyGenerator {
         }
 
         if self.settings.asset_files.is_some() {
-            let target_dir = self.settings.outputs.global_assets(None, None);
+            let target_dir = self.settings.outputs.global_assets::<GitFile>(None, None);
             for src_file in self.settings.asset_files.as_ref().unwrap() {
                 let src_file = src_file.replace("%TEMPLATE%", &self.settings.templates.template_dir());
                 let src_file = PathBuf::from(src_file);
@@ -752,7 +754,7 @@ impl GitsyGenerator {
         );
 
         if self.cli.should_open {
-            let _ = open::that(&format!("file://{}", self.settings.outputs.repo_list(None, None)));
+            let _ = open::that(&format!("file://{}", self.settings.outputs.repo_list::<GitFile>(None, None).display()));
         }
 
         Ok(())

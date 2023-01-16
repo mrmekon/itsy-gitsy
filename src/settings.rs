@@ -21,7 +21,8 @@
  * along with Itsy-Gitsy.  If not, see <http://www.gnu.org/licenses/>.
  */
 use crate::error;
-use crate::git::{GitFile, GitObject, GitRepo};
+use crate::git::GitRepo;
+use crate::util::SafePathVar;
 use clap::Parser;
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -157,71 +158,85 @@ pub struct GitsySettingsOutputs {
     pub repo_assets: Option<String>,
 }
 
-macro_rules! output_path_fn {
-    ($var:ident, $obj:ty, $id:ident, $is_dir:expr, $default:expr) => {
-        pub fn $var(&self, repo: Option<&GitRepo>, obj: Option<&$obj>) -> String {
-            let tmpl_str = self.$var.as_deref().unwrap_or($default).to_string();
-            let tmpl_str = match (tmpl_str.contains("%REPO%"), repo.is_some()) {
-                (true, true) => {
-                    let name = repo.map(|x| &x.name).unwrap();
-                    tmpl_str.replace("%REPO%", name)
-                }
-                (true, false) => {
-                    panic!("%REPO% variable not available for output path: {}", tmpl_str);
-                }
-                _ => tmpl_str,
-            };
-            let tmpl_str = match (tmpl_str.contains("%ID%"), obj.is_some()) {
-                (true, true) => {
-                    let name = obj.map(|x| &x.$id).unwrap();
-                    tmpl_str.replace("%ID%", name)
-                }
-                (true, false) => {
-                    panic!("%ID% variable not available for output path: {}", tmpl_str);
-                }
-                _ => tmpl_str,
-            };
-            let tmpl = PathBuf::from(tmpl_str);
-            let mut path = self.path.clone().canonicalize().expect(&format!(
-                "ERROR: unable to canonicalize output path: {}",
-                self.path.display()
-            ));
-            path.push(tmpl);
-            match $is_dir {
-                true => {
-                    let _ = create_dir_all(&path);
-                }
-                false => {
-                    if let Some(dir) = path.parent() {
-                        let _ = create_dir_all(dir);
-                    }
-                }
-            }
-            path.to_str()
-                .expect(&format!("Output is not a valid path: {}", path.display()))
-                .into()
-        }
-    };
+#[derive(Deserialize, Debug)]
+#[allow(non_camel_case_types)]
+pub enum GitsySettingsExtraType {
+    repo_list,
+    summary,
+    history,
+    commit,
+    branches,
+    branch,
+    tags,
+    tag,
+    files,
+    file,
+    dir
 }
-//step_map_first!(boil_in_wort, Boil, Wort, |b: &Boil| { b.wort_start() });
+
+pub fn substitute_path_vars<P,S>(path: &P, repo: Option<&GitRepo>, obj: Option<&S>) -> PathBuf
+where P: AsRef<Path>,
+      S: SafePathVar {
+    let p: PathBuf = path.as_ref().to_path_buf();
+    assert!(p.is_relative(), "ERROR: path must be relative, not absolute: {}", p.display());
+    let p: PathBuf = repo.map(|r| r.safe_substitute(&p)).unwrap_or(p);
+    let p: PathBuf = obj.map(|o| o.safe_substitute(&p)).unwrap_or(p);
+    p
+}
+
+#[derive(Deserialize, Debug)]
+pub struct GitsySettingsExtraOutput {
+    pub template: String,
+    pub output: String,
+    pub kind: GitsySettingsExtraType,
+}
+
+macro_rules! output_path_fn {
+    ($var:ident, $is_dir:expr, $default:expr) => {
+        pub fn $var<S: SafePathVar>(&self, repo: Option<&GitRepo>, obj: Option<&S>) -> PathBuf {
+            let tmpl_path = PathBuf::from(self.$var.as_deref().unwrap_or($default));
+            let new_path = substitute_path_vars(&tmpl_path, repo, obj);
+            self.canonicalize_and_create(&new_path, $is_dir)
+        }
+    }
+}
 
 #[rustfmt::skip]
 impl GitsySettingsOutputs {
-    output_path_fn!(repo_list,       GitObject, full_hash, false, "index.html");
-    output_path_fn!(summary,         GitObject, full_hash, false, "%REPO%/index.html");
-    output_path_fn!(history,         GitObject, full_hash, false, "%REPO%/history%PAGE%.html");
-    output_path_fn!(commit,          GitObject, full_hash, false, "%REPO%/commit/%ID%.html");
-    output_path_fn!(branches,        GitObject, full_hash, false, "%REPO%/branches%PAGE%.html");
-    output_path_fn!(branch,          GitObject, full_hash, false, "%REPO%/branch/%ID%.html");
-    output_path_fn!(tags,            GitObject, full_hash, false, "%REPO%/tags%PAGE%.html");
-    output_path_fn!(tag,             GitObject, full_hash, false, "%REPO%/tag/%ID%.html");
-    output_path_fn!(files,           GitObject, full_hash, false, "%REPO%/files.html");
-    output_path_fn!(file,            GitFile,   id,        false, "%REPO%/file/%ID%.html");
-    output_path_fn!(syntax_css,      GitObject, full_hash, false, "%REPO%/file/syntax.css");
-    output_path_fn!(dir,             GitFile,   id,        false, "%REPO%/dir/%ID%.html");
-    output_path_fn!(error,           GitObject, full_hash, false, "404.html");
-    output_path_fn!(global_assets,   GitObject, full_hash, true,  "assets/");
-    output_path_fn!(repo_assets,     GitObject, full_hash, true,  "%REPO%/assets/");
+    output_path_fn!(repo_list,     false, "index.html");
+    output_path_fn!(summary,       false, "%REPO%/index.html");
+    output_path_fn!(history,       false, "%REPO%/history%PAGE%.html");
+    output_path_fn!(commit,        false, "%REPO%/commit/%ID%.html");
+    output_path_fn!(branches,      false, "%REPO%/branches%PAGE%.html");
+    output_path_fn!(branch,        false, "%REPO%/branch/%ID%.html");
+    output_path_fn!(tags,          false, "%REPO%/tags%PAGE%.html");
+    output_path_fn!(tag,           false, "%REPO%/tag/%ID%.html");
+    output_path_fn!(files,         false, "%REPO%/files.html");
+    output_path_fn!(file,          false, "%REPO%/file/%ID%.html");
+    output_path_fn!(syntax_css,    false, "%REPO%/file/syntax.css");
+    output_path_fn!(dir,           false, "%REPO%/dir/%ID%.html");
+    output_path_fn!(error,         false, "404.html");
+    output_path_fn!(global_assets, true,  "assets/");
+    output_path_fn!(repo_assets,   true,  "%REPO%/assets/");
+
+    fn canonicalize_and_create(&self, path: &Path, is_dir: bool) -> PathBuf {
+        let mut canonical_path = self.path.clone()
+            .canonicalize().expect(&format!(
+                "ERROR: unable to canonicalize output path: {}",
+                self.path.display()));
+        canonical_path.push(path);
+        match is_dir {
+            true => {
+                let _ = create_dir_all(&canonical_path);
+            }
+            false => {
+                if let Some(dir) = canonical_path.parent() {
+                    let _ = create_dir_all(dir);
+                }
+            }
+        }
+        canonical_path
+    }
 
     pub fn output_dir(&self) -> String {
         self.path.clone().canonicalize()
@@ -244,7 +259,10 @@ impl GitsySettingsOutputs {
             .expect(&format!("ERROR: failed to clean output directory: {}", dir.display()));
     }
 
-    pub fn to_relative(&self, path: &str) -> String {
+    pub fn to_relative<P: AsRef<Path>>(&self, path: &P) -> String {
+        let path = path.as_ref().to_str()
+            .expect(&format!("ERROR: Unable to make path relative: {}",
+                             path.as_ref().display()));
         let path_buf = PathBuf::from(path);
         path_buf.strip_prefix(self.output_dir())
             .expect(&format!("ERROR: Unable to make path relative: {}", path))

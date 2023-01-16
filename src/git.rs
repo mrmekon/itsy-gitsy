@@ -21,11 +21,13 @@
  * along with Itsy-Gitsy.  If not, see <http://www.gnu.org/licenses/>.
  */
 use crate::settings::GitsySettingsRepo;
+use crate::util::{sanitize_path_component, SafePathVar, urlify_path};
 use crate::{error, loud, loudest};
 use git2::{DiffOptions, Error, Repository};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::Ordering;
 
@@ -86,6 +88,21 @@ impl GitRepo {
     }
 }
 
+impl SafePathVar for GitRepo {
+    fn safe_substitute(&self, path: &impl AsRef<Path>) -> PathBuf {
+        let src: &Path = path.as_ref();
+        let mut dst = PathBuf::new();
+        let safe_name = sanitize_path_component(&self.name);
+        for cmp in src.components() {
+            let cmp = cmp.as_os_str().to_string_lossy().replace("%REPO%", &safe_name);
+            dst.push(cmp);
+        }
+        assert!(src.components().count() == dst.components().count(),
+                "ERROR: path substitution accidentally created a new folder in: {}", src.display());
+        dst
+    }
+}
+
 #[derive(Clone, Serialize, Default)]
 pub struct GitsyMetadata {
     pub full_name: Option<String>,
@@ -120,6 +137,26 @@ pub struct GitObject {
     pub diff: Option<GitDiffCommit>,
 }
 
+impl SafePathVar for GitObject {
+    fn safe_substitute(&self, path: &impl AsRef<Path>) -> PathBuf {
+        let src: &Path = path.as_ref();
+        let mut dst = PathBuf::new();
+        let safe_full_hash = sanitize_path_component(&self.full_hash);
+        let safe_ref = self.ref_name.as_deref()
+            .map(|v| sanitize_path_component(&v))
+            .unwrap_or("%REF%".to_string());
+        for cmp in src.components() {
+            let cmp = cmp.as_os_str().to_string_lossy()
+                .replace("%ID%", &safe_full_hash)
+                .replace("%REF%", &safe_ref);
+            dst.push(cmp);
+        }
+        assert!(src.components().count() == dst.components().count(),
+                "ERROR: path substitution accidentally created a new folder in: {}", src.display());
+        dst
+    }
+}
+
 #[derive(Clone, Serialize, Default)]
 pub struct GitStats {
     pub files: usize,
@@ -140,6 +177,26 @@ pub struct GitFile {
     pub contents: Option<String>,
     pub contents_safe: bool,
     pub contents_preformatted: bool,
+}
+
+impl SafePathVar for GitFile {
+    fn safe_substitute(&self, path: &impl AsRef<Path>) -> PathBuf {
+        let src: &Path = path.as_ref();
+        let mut dst = PathBuf::new();
+        let safe_id = sanitize_path_component(&self.id);
+        let safe_name = sanitize_path_component(&self.name);
+        let safe_path = sanitize_path_component(&urlify_path(&self.path));
+        for cmp in src.components() {
+            let cmp = cmp.as_os_str().to_string_lossy()
+                .replace("%ID%", &safe_id)
+                .replace("%NAME%", &safe_name)
+                .replace("%PATH%", &safe_path);
+            dst.push(cmp);
+        }
+        assert!(src.components().count() == dst.components().count(),
+                "ERROR: path substitution accidentally created a new folder in: {}", src.display());
+        dst
+    }
 }
 
 #[derive(Clone, Serialize, Default)]
