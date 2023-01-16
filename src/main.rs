@@ -32,7 +32,6 @@ use settings::{GitsyCli, GitsySettings};
 // TODO:
 //
 //   * favicon
-//   * permalinks (at least for README?)
 //   * better error propagation
 //   * automated tests
 //   * documentation + examples

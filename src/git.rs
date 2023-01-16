@@ -143,7 +143,7 @@ impl SafePathVar for GitObject {
         let mut dst = PathBuf::new();
         let safe_full_hash = sanitize_path_component(&self.full_hash);
         let safe_ref = self.ref_name.as_deref()
-            .map(|v| sanitize_path_component(&v))
+            .map(|v| sanitize_path_component(&urlify_path(v)))
             .unwrap_or("%REF%".to_string());
         for cmp in src.components() {
             let cmp = cmp.as_os_str().to_string_lossy()

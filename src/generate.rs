@@ -25,7 +25,7 @@ use crate::{
     git::{dir_listing, parse_repo, GitFile, GitRepo, GitsyMetadata},
     loud, louder, loudest, normal, normal_noln,
     settings::{GitsyCli, GitsyRepoDescriptions, GitsySettings, GitsySettingsRepo},
-    template::{DirFilter, FileFilter, HexFilter, MaskFilter, OctFilter, Pagination, TsDateFn, TsTimestampFn},
+    template::{DirFilter, FileFilter, HexFilter, MaskFilter, OctFilter, Pagination, TsDateFn, TsTimestampFn, UrlStringFilter},
     util::{GitsyError, GitsyErrorKind, VERBOSITY},
 };
 use git2::{Error, Repository};
@@ -289,6 +289,7 @@ impl GitsyGenerator {
         tera.register_filter("hex", HexFilter {});
         tera.register_filter("oct", OctFilter {});
         tera.register_filter("mask", MaskFilter {});
+        tera.register_filter("url_string", UrlStringFilter {});
         tera.register_function("ts_to_date", TsDateFn {});
         tera.register_function("ts_to_git_timestamp", TsTimestampFn {});
         Ok(tera)

@@ -21,6 +21,7 @@
  * along with Itsy-Gitsy.  If not, see <http://www.gnu.org/licenses/>.
  */
 use crate::git::GitFile;
+use crate::util::{sanitize_path_component, urlify_path};
 use chrono::{naive::NaiveDateTime, offset::FixedOffset, DateTime};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -113,6 +114,15 @@ impl Filter for MaskFilter {
             },
         };
         Ok(to_value(v & mask).unwrap())
+    }
+}
+
+pub struct UrlStringFilter;
+impl Filter for UrlStringFilter {
+    fn filter(&self, value: &Value, _args: &HashMap<String, Value>) -> Result<Value, tera::Error> {
+        let v: String = try_get_value!("url_string", "value", String, value);
+        let sanitized = sanitize_path_component(&urlify_path(&v));
+        Ok(to_value(sanitize_path_component(&sanitized)).unwrap())
     }
 }
 

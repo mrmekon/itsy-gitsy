@@ -56,8 +56,9 @@ Feedback, bug reports, and feature requests are welcome.
     * optional Syntax highlighting
   * Error page
 * Configurable output
-  * configurable file names
+  * configurable file names, with variable substitution
   * configurable directory structure
+* Paginated output
 * Configurable limits for RAM and disk space usage
 * Site-wide and per-repository asset files
 
@@ -107,6 +108,18 @@ The top of the file contains global, site-wide settings like the site name, desc
 
 This should be followed by the `[gitsy_outputs]` section, which defines which input templates to use, and which files to output.  Input templates that are not specified will not be generated, so you can disable any output types that you don't need.  Templates can be used as many times as desired, generating arbitrarily many outputs.
 
+A few special variables can be used in output filenames:
+
+| Variable     | Purpose                                                                |
+|--------------|------------------------------------------------------------------------|
+| `%REPO%`     | Replaced with the name of the current repository.                      |
+| `%ID%`       | Replaced with the ID/hash of the current object (commit, branch, tag). |
+| `%PAGE%`     | Replaced with the current page, if pagination is enabled.              |
+| `%NAME%`     | Replaced with the name of the current object (file)                    |
+| `%PATH%`     | Replaced with the full path of the current object (file)               |
+| `%REF%`      | Replaced with the reference name of the current object (branch, tag)   |
+| `%TEMPLATE%` | Replaced with the template directory path (asset files)                |
+
 An optional `[gitsy_extra]` section can be used to provide global, user-defined key/value pairs to all of the templates.  Use this if you want to add custom site-wide variables for use in your templates.
 
 Finally, zero or more sections with arbitrary names define individual Git repositories to index.  Here, you can override most of the global settings at a per-repository level.  This is more powerful and allows specifying more metadata than bulk-import.
@@ -140,15 +153,18 @@ Any templates that are not specified in the configuration file are not evaluated
 
 Tera templates support custom functions and filters, and Itsy-Gitsy defines a few for convenience:
 
-| Name                | Type     | Purpose                                    | Example                                          |
-|---------------------|----------|--------------------------------------------|--------------------------------------------------|
-| only_files          | filter   | Filter the file tree into only files       | {{ all_files \| only_files }}                    |
-| only_dirs           | filter   | Filter the file tree into only directories | {{ all_files \| only_dirs }}                     |
-| hex                 | filter   | Output a number as a hex string            | {{ 17 \| hex }}                                  |
-| oct                 | filter   | Output a number as an octal string         | {{ 17 \| oct }}                                  |
-| mask                | filter   | Bitwise mask a number with another number  | {{ 17 \| mask(mask="0x77") }}                    |
-| ts_to_date          | function | Convert a timestamp and offset to a date   | {{ts_to_date(ts=ts_utc, tz=ts_offset)}}          |
-| ts_to_git_timestamp | function | Same, but print in standard Git format     | {{ts_to_git_timestamp(ts=ts_utc, tz=ts_offset)}} |
+| Name                | Type     | Purpose                                    | Example                                          |              |
+|---------------------|----------|--------------------------------------------|--------------------------------------------------|--------------|
+| only_files          | filter   | Filter the file tree into only files       | {{ all_files \| only_files }}                    |              |
+| only_dirs           | filter   | Filter the file tree into only directories | {{ all_files \| only_dirs }}                     |              |
+| hex                 | filter   | Output a number as a hex string            | {{ 17 \| hex }}                                  |              |
+| oct                 | filter   | Output a number as an octal string         | {{ 17 \| oct }}                                  |              |
+| mask                | filter   | Bitwise mask a number with another number  | {{ 17 \| mask(mask="0x77") }}                    |              |
+| url_string          | filter   | Convert a string to a url-friendly "slug"  | {{ file.path                                     | url_string}} |
+| ts_to_date          | function | Convert a timestamp and offset to a date   | {{ts_to_date(ts=ts_utc, tz=ts_offset)}}          |              |
+| ts_to_git_timestamp | function | Same, but print in standard Git format     | {{ts_to_git_timestamp(ts=ts_utc, tz=ts_offset)}} |              |
+
+`url_string` can be used in conjunction with the `%PATH%` and `%REF%` filename variables.  Both use a very primitive form of "slugifying" the strings into a format that can be used in a URL.  This allows for basic permalinks.
 
 ## Security
 
@@ -171,10 +187,15 @@ All metadata of all repositories, except for file contents, is held in memory.  
 
 Small repositories with dozens to hundreds of commits can be generated on the order of a few seconds or less.  Large repositories take *considerably* longer; parsing 1,000,000 commits from the Linux kernel repository with `limit_tree_depth = 3`, `limit_context = 10` and `limit_diffs = 100` took ~30 minutes on a fast laptop, and produced a ~2GB website.
 
+## Other Considerations
+
+The default templates are provided as a starting point, and demonstrate most features.  It is fully expected that you will customize or replace them.
+
+The default templates use the `%ID%` variable for outputting files, directories, branches, and tags.  These are guaranteed to be unique and URL-friendly.  Links to files and directories, however, are invalidated when changes are made to the repository.  To get "permalinks", you can change the output variables to use `%PATH%` instead, and replace `{{file.id}}` and `{{dir.id}}` with `{{file.path | url_string}}` and `{{dir.path | url_string}}` in all of the template files.
+
 ## Limitations
 
 * Only indexes history of one branch.
-* No permalinks.  Links to file contents are invalidated if the file changes.
 * High memory usage for large repositories.
 * Limited to the pre-defined set of input templates.
 * Leaves output in unknown, partial state in case of errors.
