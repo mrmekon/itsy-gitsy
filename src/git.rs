@@ -293,7 +293,7 @@ fn walk_file_tree(
 
 pub fn dir_listing(repo: &Repository, file: &GitFile) -> Result<Vec<GitFile>, Error> {
     let mut files: Vec<GitFile> = vec![];
-    walk_file_tree(&repo, &file.id, &mut files, 0, usize::MAX, false, "")?;
+    walk_file_tree(&repo, &file.id, &mut files, 0, usize::MAX, false, &(file.path.clone() + "/"))?;
     Ok(files)
 }
 
