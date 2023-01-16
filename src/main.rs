@@ -41,6 +41,6 @@ use settings::{GitsyCli, GitsySettings};
 fn main() {
     let cli = GitsyCli::new();
     let (settings, repo_descriptions) = GitsySettings::new(&cli);
-    let generator = GitsyGenerator::new(cli, settings, repo_descriptions);
+    let mut generator = GitsyGenerator::new(cli, settings, repo_descriptions);
     generator.generate().expect("Itsy-Gitsy generation failed!");
 }

@@ -20,10 +20,11 @@
  * You should have received a copy of the GNU General Public License
  * along with Itsy-Gitsy.  If not, see <http://www.gnu.org/licenses/>.
  */
-use crate::error;
+use crate::{louder, error};
 use crate::git::GitRepo;
 use crate::util::SafePathVar;
 use clap::Parser;
+use git2::Repository;
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{create_dir, create_dir_all, read_dir, remove_dir_all, read_to_string};
@@ -112,55 +113,19 @@ impl GitsyCli {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct GitsySettingsTemplates {
-    pub path: PathBuf,
-    pub repo_list: Option<String>,
-    pub summary: Option<String>,
-    pub history: Option<String>,
-    pub commit: Option<String>,
-    pub branches: Option<String>,
-    pub branch: Option<String>,
-    pub tags: Option<String>,
-    pub tag: Option<String>,
-    pub files: Option<String>,
-    pub file: Option<String>,
-    pub dir: Option<String>,
-    pub error: Option<String>,
-}
-
-impl GitsySettingsTemplates {
-    pub fn template_dir(&self) -> String {
-        self.path.clone().canonicalize()
-            .expect(&format!("ERROR: unable to canonicalize template path: {}", self.path.display()))
-            .to_str().expect(&format!("ERROR: unable to parse template path: {}", self.path.display()))
-            .to_string()
-    }
-}
-
-#[derive(Deserialize, Debug)]
 pub struct GitsySettingsOutputs {
-    pub path: PathBuf,
+    pub output_root: PathBuf,
+    pub template_root: PathBuf,
+    pub templates: Option<Vec<GitsySettingsTemplate>>,
     pub cloned_repos: Option<String>,
-    pub repo_list: Option<String>,
-    pub summary: Option<String>,
-    pub history: Option<String>,
-    pub commit: Option<String>,
-    pub branches: Option<String>,
-    pub branch: Option<String>,
-    pub tags: Option<String>,
-    pub tag: Option<String>,
-    pub files: Option<String>,
-    pub file: Option<String>,
-    pub dir: Option<String>,
-    pub error: Option<String>,
     pub syntax_css: Option<String>,
     pub global_assets: Option<String>,
     pub repo_assets: Option<String>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, PartialEq)]
 #[allow(non_camel_case_types)]
-pub enum GitsySettingsExtraType {
+pub enum GitsyTemplateType {
     repo_list,
     summary,
     history,
@@ -171,7 +136,8 @@ pub enum GitsySettingsExtraType {
     tag,
     files,
     file,
-    dir
+    dir,
+    error,
 }
 
 pub fn substitute_path_vars<P,S>(path: &P, repo: Option<&GitRepo>, obj: Option<&S>) -> PathBuf
@@ -185,13 +151,13 @@ where P: AsRef<Path>,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct GitsySettingsExtraOutput {
+pub struct GitsySettingsTemplate {
     pub template: String,
     pub output: String,
-    pub kind: GitsySettingsExtraType,
+    pub kind: GitsyTemplateType,
 }
 
-macro_rules! output_path_fn {
+macro_rules! template_fn {
     ($var:ident, $is_dir:expr, $default:expr) => {
         pub fn $var<S: SafePathVar>(&self, repo: Option<&GitRepo>, obj: Option<&S>) -> PathBuf {
             let tmpl_path = PathBuf::from(self.$var.as_deref().unwrap_or($default));
@@ -201,29 +167,70 @@ macro_rules! output_path_fn {
     }
 }
 
+macro_rules! templates_fn {
+    ($var:ident, $is_dir:expr) => {
+        pub fn $var<S: SafePathVar>(&self, repo: Option<&GitRepo>, obj: Option<&S>) -> Vec<(PathBuf, PathBuf)> {
+            match &self.templates {
+                Some(template) => {
+                    template.iter()
+                        .filter(|x| x.kind == GitsyTemplateType::$var)
+                        .map(|x| {
+                            let tmpl_path = PathBuf::from(&x.output);
+                            let new_path = substitute_path_vars(&tmpl_path, repo, obj);
+                            (PathBuf::from(&x.template),
+                             self.canonicalize_and_create(&new_path, $is_dir))
+                        }).collect()
+                },
+                None => {
+                    vec!()
+                },
+            }
+        }
+    }
+}
+
+impl SafePathVar for GitsySettingsOutputs {
+    fn safe_substitute(&self, path: &impl AsRef<Path>) -> PathBuf {
+        let src: &Path = path.as_ref();
+        let mut dst = PathBuf::new();
+        let root = self.template_root.to_str()
+            .expect(&format!("ERROR: couldn't parse template root: {}", self.template_root.display()));
+        for cmp in src.components() {
+            // NOTE: this variable is not sanitized, since it's
+            // allowed to create new directory structure.
+            let cmp = cmp.as_os_str().to_string_lossy()
+                .replace("%TEMPLATE%", &root);
+            dst.push(cmp);
+        }
+        dst
+    }
+}
+
 #[rustfmt::skip]
 impl GitsySettingsOutputs {
-    output_path_fn!(repo_list,     false, "index.html");
-    output_path_fn!(summary,       false, "%REPO%/index.html");
-    output_path_fn!(history,       false, "%REPO%/history%PAGE%.html");
-    output_path_fn!(commit,        false, "%REPO%/commit/%ID%.html");
-    output_path_fn!(branches,      false, "%REPO%/branches%PAGE%.html");
-    output_path_fn!(branch,        false, "%REPO%/branch/%ID%.html");
-    output_path_fn!(tags,          false, "%REPO%/tags%PAGE%.html");
-    output_path_fn!(tag,           false, "%REPO%/tag/%ID%.html");
-    output_path_fn!(files,         false, "%REPO%/files.html");
-    output_path_fn!(file,          false, "%REPO%/file/%ID%.html");
-    output_path_fn!(syntax_css,    false, "%REPO%/file/syntax.css");
-    output_path_fn!(dir,           false, "%REPO%/dir/%ID%.html");
-    output_path_fn!(error,         false, "404.html");
-    output_path_fn!(global_assets, true,  "assets/");
-    output_path_fn!(repo_assets,   true,  "%REPO%/assets/");
+    // Single entries:
+    template_fn!(syntax_css,    false, "%REPO%/file/syntax.css");
+    template_fn!(global_assets, true,  "assets/");
+    template_fn!(repo_assets,   true,  "%REPO%/assets/");
+    // Zero or more entries (Vec):
+    templates_fn!(repo_list, false);
+    templates_fn!(summary, false);
+    templates_fn!(history, false);
+    templates_fn!(commit, false);
+    templates_fn!(branches, false);
+    templates_fn!(branch, false);
+    templates_fn!(tags, false);
+    templates_fn!(tag, false);
+    templates_fn!(files, false);
+    templates_fn!(file, false);
+    templates_fn!(dir, false);
+    templates_fn!(error, false);
 
     fn canonicalize_and_create(&self, path: &Path, is_dir: bool) -> PathBuf {
-        let mut canonical_path = self.path.clone()
+        let mut canonical_path = self.output_root.clone()
             .canonicalize().expect(&format!(
                 "ERROR: unable to canonicalize output path: {}",
-                self.path.display()));
+                self.output_root.display()));
         canonical_path.push(path);
         match is_dir {
             true => {
@@ -238,21 +245,49 @@ impl GitsySettingsOutputs {
         canonical_path
     }
 
-    pub fn output_dir(&self) -> String {
-        self.path.clone().canonicalize()
-            .expect(&format!("ERROR: unable to canonicalize output path: {}", self.path.display()))
-            .to_str().expect(&format!("ERROR: unable to parse output path: {}", self.path.display()))
-            .to_string()
+    pub fn output_dir(&self) -> PathBuf {
+        self.output_root.clone().canonicalize()
+            .expect(&format!("ERROR: unable to canonicalize output path: {}", self.output_root.display()))
+    }
+
+    pub fn template_dir(&self) -> PathBuf {
+        self.template_root.clone().canonicalize()
+            .expect(&format!("ERROR: unable to canonicalize template path: {}", self.template_root.display()))
+    }
+
+    pub fn has_files(&self) -> bool {
+        match &self.templates {
+            Some(template) => template.iter().filter(|x| x.kind == GitsyTemplateType::file).count() > 0,
+            _ => false,
+        }
+    }
+
+    pub fn asset<P: AsRef<Path>>(&self, asset: &P, parsed_repo: Option<&GitRepo>, repo: Option<&Repository>) -> PathBuf {
+        let tmpl_path = asset.as_ref().to_path_buf();
+        let asset_path = substitute_path_vars(&tmpl_path, parsed_repo, Some(self));
+        let full_path = match repo {
+            Some(repo) => {
+                let mut full_path = repo.path().to_owned();
+                full_path.push(asset_path);
+                full_path
+            },
+            _ => {
+                asset_path
+            }
+        };
+        full_path
     }
 
     pub fn create(&self) {
-        let _ = create_dir(self.path.to_str().expect(&format!("ERROR: output path invalid: {}", self.path.display())));
+        louder!("Creating output directory: {}", self.output_root.display());
+        let _ = create_dir(self.output_root.to_str().expect(&format!("ERROR: output path invalid: {}", self.output_root.display())));
     }
 
     pub fn clean(&self) {
-        if !self.path.exists() {
+        if !self.output_root.exists() {
             return;
         }
+        louder!("Cleaning output directory: {}", self.output_root.display());
         let dir: PathBuf = PathBuf::from(&self.output_dir());
         assert!(dir.is_dir(), "ERROR: Output directory is... not a directory? {}", dir.display());
         remove_dir_all(&dir)
@@ -269,6 +304,41 @@ impl GitsySettingsOutputs {
             .to_str()
             .expect(&format!("ERROR: Unable to make path relative: {}", path))
             .to_string()
+    }
+
+    pub fn assert_valid<P: AsRef<Path>>(&self, path: &P) -> bool {
+        let path = path.as_ref().to_str()
+            .expect(&format!("ERROR: attempted to write unrecognizeable path: {}", path.as_ref().display()));
+        // Ensure that the requested output path is actually a child
+        // of the output directory, as a sanity check to ensure we
+        // aren't writing out of bounds.
+        let canonical_root = self.output_root.canonicalize().expect(&format!(
+            "Cannot find canonical version of output path: {}",
+            self.output_root.display()
+        ));
+        let canonical_path = PathBuf::from(path);
+        let has_relative_dirs = canonical_path
+            .ancestors()
+            .any(|x| x.file_name().is_none() && x != Path::new("/"));
+        assert!(
+            canonical_path.is_absolute(),
+            "ERROR: write_rendered called with a relative path: {}",
+            path
+        );
+        assert!(
+            !has_relative_dirs,
+            "ERROR: write_rendered called with a relative path: {}",
+            path
+        );
+        let _ = canonical_path
+            .ancestors()
+            .find(|x| x == &canonical_root)
+            .expect(&format!(
+                "Output file {} not contained in output path: {}",
+                canonical_path.display(),
+                canonical_root.display()
+            ));
+        true
     }
 }
 
@@ -326,10 +396,6 @@ pub struct GitsySettings {
     pub readme_files: Option<Vec<String>>,
     pub asset_files: Option<Vec<String>>,
     pub branch: Option<String>,
-    #[serde(rename(deserialize = "gitsy_templates"))]
-    pub templates: GitsySettingsTemplates,
-    #[serde(rename(deserialize = "gitsy_outputs"))]
-    pub outputs: GitsySettingsOutputs,
     pub paginate_history: Option<usize>,
     pub paginate_branches: Option<usize>,
     pub paginate_tags: Option<usize>,
@@ -346,6 +412,8 @@ pub struct GitsySettings {
     pub render_markdown: Option<bool>,
     pub syntax_highlight: Option<bool>,
     pub syntax_highlight_theme: Option<String>,
+    #[serde(rename(deserialize = "gitsy_outputs"))]
+    pub outputs: GitsySettingsOutputs,
     #[serde(rename(deserialize = "gitsy_extra"))]
     pub extra: Option<BTreeMap<String, toml::Value>>,
 }

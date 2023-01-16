@@ -298,185 +298,129 @@ syntax_highlight_theme = "base16-ocean.light"
 
 ###############################################################################
 ##
-## Subsection specifying which files to use as templates.
+## Subsection specifying output paths, and how they are generated.
 ##
-## The individual templates are relative to the `path` directory.  Each
-## template is a single file using the Tera template engine's format for text
-## substitution.
+## Itsy-Gitsy requires two root paths, both specified here:
 ##
-## All except `path` are optional.  If not specified, the associated outputs
-## will not be generated.
+## 1) `output_root`, a directory where all rendered output will be written
+## 2) `template_root`, a directory where all input templates are stored
 ##
-###############################################################################
-[gitsy_templates]
-
-# Path to a folder containing Tera templates.
-#
-# All files with a .html extension found under this directory, and its
-# immediate children directories, are imported into the Tera template engine.
-path = "templates/default_light/"
-
-# Template responsible for the list of repositories.
-#
-# This template is evaluated with the list of all configured repositories.  It
-# is intended for providing an overview of the available repositories, but the
-# full details of each repository are also included.
-#
-# This template executes one time.
-repo_list    = "repos.html"
-
-# Template responsible for summarizing a single repository.
-#
-# This template is evaluated with a single parsed repository, with all repo
-# data (commits, branches, etc) available.
-#
-# This template executes one time per repository.
-summary = "summary.html"
-
-# Template responsible for displaying the commit history.
-#
-# This template is evaluated with the same data as `summary`.  If the
-# `paginate_history` setting is non-zero, this may be called several
-# times with the `history` template variable reduced to the requested
-# page size, and with a `page` template variable provided to identify
-# the current, previous, and next pages.
-#
-# This template executes at least one time per repository, or several
-# times if paginated.
-history      = "history.html"
-
-# Template responsible for displaying a single commit.
-#
-# Called once per parsed commit, with both the whole repository and the current
-# commit available to the template.
-#
-# This template executes many times.
-commit       = "commit.html"
-
-# Template responsible for displaying the repo branches.
-#
-# This template is evaluated with the same data as `summary`.  If the
-# `paginate_branches` setting is non-zero, this may be called several
-# times with the `branches` template variable reduced to the requested
-# page size, and with a `page` template variable provided to identify
-# the current, previous, and next pages.
-#
-# This template executes at least one time per repository, or several
-# times if paginated.
-branches     = "branches.html"
-
-# Template responsible for displaying a single branch.
-#
-# Called once per parsed branch, with both the whole repository and the current
-# branch available to the template.
-#
-# This template executes many times.
-branch       = "branch.html"
-
-# Template responsible for displaying the repo tags.
-#
-# This template is evaluated with the same data as `summary`.  If the
-# `paginate_tags` setting is non-zero, this may be called several
-# times with the `tags` template variable reduced to the requested
-# page size, and with a `page` template variable provided to identify
-# the current, previous, and next pages.
-#
-# This template executes at least one time per repository, or several
-# times if paginated.
-tags         = "tags.html"
-
-# Template responsible for displaying a single tag.
-#
-# Called once per parsed tag, with both the whole repository and the current
-# tag available to the template.
-#
-# This template executes many times.
-tag          = "tag.html"
-
-# Template responsible for displaying file tree.
-#
-# Called with the same variables as the `summary` page, this simply gives an
-# alternative locate to list the files in the root of the repository.
-#
-# This template executes once per repository.
-files        = "files.html"
-
-# Template responsible for displaying a single file.
-#
-# Called once per parsed file, with both the whole repository and the current
-# file available to the template.
-#
-# This template executes many times.
-file         = "file.html"
-
-# Template responsible for displaying a single directory.
-#
-# Called once per parsed directory, with both the whole repository and the
-# current directory available to the template.
-#
-# This template executes many times.
-dir          = "dir.html"
-
-# Template responsible for displaying a site-wide error.
-#
-# Intended for 404 (page not found) errors.  If used, you must configure your
-# webserver to redirect HTTP errors to the generated error page.
-#
-# This template executes one time.
-error        = "404.html"
-
-
-
-###############################################################################
 ##
-## Subsection specifying names of output files/directories.
+## Next, a `templates` table is defined, which contains a variable
+## number of entries.  Each entry must contain the following three
+## variables:
 ##
-## Each entry pairs with one of the entries in `gitsy_templates` above,
-## specifying the directories and filenames for the rendered output, after the
-## template engine has performed its substitutions.
+## - `template` -- the input file to use as a template, relative to
+##                 `template_root`
 ##
-## All outputs are relative to the `path` directory.
+## - `output` -- the output file(s) to write, relative to
+##                 `output_root`.  These filenames can contain
+##                 variables, which are defined below.
 ##
-## There are currently two supported variables for paths:
+## - `kind` -- the type of output being generated.  This decides which
+##             variables are available in the template, and which
+##             variables can be substituted in the output filename.
 ##
-## * "%REPO%" -- replaced with the name of the currently processing repository
-## * "%ID%" -- replaced with the ID of the currently processing object
-## * "%PAGE%" -- replaced with the current page number if output is paginated
 ##
-## All except `path` are optional.  If not specified, sensible defaults will be
-## used.
+## The following output types are available:
+##
+## - `repo_list` -- Template receives all defined repository metadata in the `repos` variable.
+##
+## - `summary` -- Template receives all metadata of the current repo.
+##                This is split across the `name`, `history`,
+##                `branches`, `tags`, `root_files`, `all_files`,
+##                `commits`, `file_ids`, commit_ids`, `metadata`,
+##                `last_ts_utc`, and `last_ts_offset` variables.
+##
+## - `history` -- All current repo metadata.  `history` variable not
+##                affected by `limit_context`.
+##
+## - `commit` -- All current repo metadata.  Current commit object in
+##               `commit` variable.
+##
+## - `branches` -- All current repo metadata.  `branches` variable not
+##                 affected by `limit_context`.
+##
+## - `branch` -- All current repo metadata.  Current branch object in
+##               `branch` variable.
+##
+## - `tags` -- All current repo metadata.  `tags` variable not
+##             affected by `limit_context`.
+##
+## - `tag` -- All current repo metadata.  Current tag object in `tag`
+##            variable.
+##
+## - `files` -- All current repo metadata.
+##
+## - `file` -- All current repo metadata.  Current file object in
+##             `file` variable.
+##
+## - `dir` -- All current repo metadata.  Current directory object in
+##            `dir` variable.
+##
+## - `error` -- All metadata for all repositories.
+##
+##
+## The following variables are permitted in `output` paths:
+##
+## - "%REPO%" -- Replaced with the name of the currently processing
+##               repository.  Available in all except `repos_list` and
+##               `error`.
+##
+## - "%ID%" -- Replaced with the ID of the currently processing
+##             object.  Available in `commit`, `branch`, `tag`,
+##             `file`, and `dir`.
+##
+## - "%PAGE%" -- Replaced with the current page number if output is
+##               paginated.  Available in `history`, `branches`, and
+##               `tags`.
+##
+##
+## All except `output_root` and `template_root` are optional.
+## Template types that are not specified will not be generated, and
+## all template types can be generated as many times as desired.
 ##
 ###############################################################################
 [gitsy_outputs]
-path = "rendered/"
-repo_list     = "index.html"
-summary  = "%REPO%/index.html"
-history       = "%REPO%/history%PAGE%.html"
-commit        = "%REPO%/commit/%ID%.html"
-branches      = "%REPO%/branches%PAGE%.html"
-branch        = "%REPO%/branch/%ID%.html"
-tags          = "%REPO%/tags%PAGE%.html"
-tag           = "%REPO%/tag/%ID%.html"
-files         = "%REPO%/files.html"
-file          = "%REPO%/file/%ID%.html"
-dir           = "%REPO%/dir/%ID%.html"
-error         = "404.html"
+output_root    = "rendered/"
+template_root  = "templates/default_light/"
+
+templates = [
+      { template = "repos.html",    output = "index.html",                 kind = "repo_list" },
+      { template = "summary.html",  output = "%REPO%/index.html",          kind = "summary"   },
+      { template = "history.html",  output = "%REPO%/history%PAGE%.html",  kind = "history"   },
+      { template = "commit.html",   output = "%REPO%/commit/%ID%.html",    kind = "commit"    },
+      { template = "branches.html", output = "%REPO%/branches%PAGE%.html", kind = "branches"  },
+      { template = "branch.html",   output = "%REPO%/branch/%ID%.html",    kind = "branch"    },
+      { template = "tags.html",     output = "%REPO%/tags%PAGE%.html",     kind = "tags"      },
+      { template = "tag.html",      output = "%REPO%/tag/%ID%.html",       kind = "tag"       },
+      { template = "files.html",    output = "%REPO%/files.html",          kind = "files"     },
+      { template = "file.html",     output = "%REPO%/file/%ID%.html",      kind = "file"      },
+      { template = "dir.html",      output = "%REPO%/dir/%ID%.html",       kind = "dir"       },
+      { template = "404.html",      output = "404.html",                   kind = "error"     }
+]
 
 # Output file for syntax highlighting CSS
 #
 # If syntax highlighting is enabled, a single CSS file will be
 # rendered to this path.  It must be included in the file template to
 # render the syntax highlighting correctly.
+#
+# If not specified, a default is used.
 syntax_css    = "%REPO%/file/syntax.css"
 
 # Output directory for files specified in global `asset_files`.
 #
 # Each input file is copied to this directory unmodified.
+#
+# If not specified, a default is used.
 global_assets = "assets/"
 
 # Output directory for files specified in per-repo `asset_files`.
 #
 # Each input file is copied to this directory unmodified.
+#
+# If not specified, a default is used.
 repo_assets   = "%REPO%/assets/"
 
 # Directory to clone remote repositories into.
@@ -487,7 +431,10 @@ repo_assets   = "%REPO%/assets/"
 # runs, all remote refs are fetched rather than recloning.
 #
 # Only non-authenticated HTTPS repositories are currently supported.
+#
+# If not specified, a default is used.
 cloned_repos  = "cloned_repos/"
+
 
 
 ###############################################################################

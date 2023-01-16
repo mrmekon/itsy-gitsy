@@ -105,7 +105,7 @@ See the included `config.toml` for full documentation of the available settings.
 
 The top of the file contains global, site-wide settings like the site name, description, base URL, pagination rules, and memory limits.  Here you can also specify directories that contain Git repositories in subdirectories, which is used for bulk-import of many repositories.
 
-This should be followed by the `[gitsy_templates]` section and `[gitsy_outputs]` sections, which define the input templates and output paths respectively.  Input templates that are not specified will not be generated, so you can disable any output types that you don't need by commenting out the appropriate line in `[gitsy_templates]`
+This should be followed by the `[gitsy_outputs]` section, which defines which input templates to use, and which files to output.  Input templates that are not specified will not be generated, so you can disable any output types that you don't need.  Templates can be used as many times as desired, generating arbitrarily many outputs.
 
 An optional `[gitsy_extra]` section can be used to provide global, user-defined key/value pairs to all of the templates.  Use this if you want to add custom site-wide variables for use in your templates.
 
