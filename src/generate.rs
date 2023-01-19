@@ -22,7 +22,7 @@
  */
 use crate::{
     error,
-    git::{dir_listing, parse_repo, GitFile, GitRepo, GitsyMetadata},
+    git::{dir_listing, parse_repo, GitFile, GitObject, GitRepo, GitsyMetadata},
     loud, louder, loudest, normal, normal_noln,
     settings::{GitsyCli, GitsyRepoDescriptions, GitsySettings, GitsySettingsRepo},
     template::{
@@ -34,6 +34,7 @@ use chrono::{DateTime, Local};
 use git2::{Error, Repository};
 use rayon::prelude::*;
 use std::cmp;
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -443,14 +444,26 @@ impl GitsyGenerator {
                 .try_for_each(|(idx, page)| {
                     let mut paged_ctx = ctx.clone();
                     let pagination = Pagination::new(idx + 1, page_count, &out_path);
+                    // make sure the 'commits' map contains the same
+                    // commits as the current page.
+                    let commits: BTreeMap<String, GitObject> = page
+                        .iter()
+                        .map(|entry| match parsed_repo.commits.get(&entry.full_hash) {
+                            Some(com) => Some((entry.full_hash.clone(), com.clone())),
+                            _ => None,
+                        })
+                        .map_while(|x| x)
+                        .collect();
                     paged_ctx.insert("page", &pagination.with_relative_paths());
                     paged_ctx.insert("history", &page);
+                    paged_ctx.insert("commits", &commits);
                     let rendered = tera.render(templ_path, &paged_ctx)?;
                     let bytes = self.write_rendered(&pagination.cur_page, &rendered);
                     repo_bytes.fetch_add(bytes, Ordering::SeqCst);
                     atomic_bytes.fetch_add(bytes, Ordering::SeqCst);
                     paged_ctx.remove("page");
                     paged_ctx.remove("history");
+                    paged_ctx.remove("commits");
                     size_check_atomic!(
                         repo_desc,
                         atomic_bytes,
