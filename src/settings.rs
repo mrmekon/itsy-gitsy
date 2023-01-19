@@ -399,6 +399,7 @@ pub struct GitsySettings {
     pub paginate_history: Option<usize>,
     pub paginate_branches: Option<usize>,
     pub paginate_tags: Option<usize>,
+    pub threads: Option<usize>,
     pub limit_history: Option<usize>,
     pub limit_commits: Option<usize>,
     pub limit_branches: Option<usize>,

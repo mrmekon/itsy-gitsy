@@ -22,9 +22,11 @@
  */
 use crate::settings::GitsySettingsRepo;
 use crate::util::{sanitize_path_component, SafePathVar, urlify_path};
-use crate::{error, loud, loudest};
+use crate::{error, loud, louder, loudest};
 use git2::{DiffOptions, Error, Repository};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::AtomicUsize;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -297,18 +299,31 @@ pub fn dir_listing(repo: &Repository, file: &GitFile) -> Result<Vec<GitFile>, Er
     Ok(files)
 }
 
+pub fn parse_revwalk(repo: &Repository, mut revwalk: git2::Revwalk, references: &BTreeMap<String, Vec<String>>, settings: &GitsySettingsRepo) -> Result<Vec<GitObject>, Error> {
+    let mut history: Vec<GitObject> = vec![];
+
+    for (idx, oid) in revwalk.by_ref().enumerate() {
+        let oid = oid?;
+        if  idx >= settings.limit_history.unwrap_or(usize::MAX) {
+            break;
+        }
+        let parsed = parse_commit(idx, settings, repo, &oid.to_string(), &references)?;
+        loudest!("   + [{}] {} {}", idx, parsed.full_hash,
+                 parsed.summary.as_deref().unwrap_or_default());
+        history.push(parsed);
+    }
+    Ok(history)
+}
+
 pub fn parse_repo(
     repo: &Repository,
     name: &str,
     settings: &GitsySettingsRepo,
     metadata: GitsyMetadata,
 ) -> Result<GitRepo, Error> {
-    let mut history: Vec<GitObject> = vec![];
     let mut branches: Vec<GitObject> = vec![];
     let mut tags: Vec<GitObject> = vec![];
     let mut commits: BTreeMap<String, GitObject> = BTreeMap::new();
-    let mut commit_count = 0;
-    let mut history_count = 0;
     let mut branch_count = 0;
     let mut tag_count = 0;
     let branch_name = settings.branch.as_deref().unwrap_or("master");
@@ -338,94 +353,108 @@ pub fn parse_repo(
     }
     loud!(" - parsed {} references", references.len());
 
-    let mut revwalk = repo.revwalk()?;
-    // TODO: TOPOLOGICAL might be better, but it's also ungodly slow
-    // on large repos.  Maybe this should be configurable.
-    //
-    //revwalk.set_sorting(git2::Sort::TOPOLOGICAL)?;
-    revwalk.set_sorting(git2::Sort::NONE)?;
-    revwalk.push(branch_obj.id())?;
     loudest!(" - Parsing history:");
-    for (idx, oid) in revwalk.by_ref().enumerate() {
-        let oid = oid?;
-        if commit_count >= settings.limit_commits.unwrap_or(usize::MAX)
-            || history_count >= settings.limit_history.unwrap_or(usize::MAX)
-        {
-            break;
-        }
-        commits.insert(oid.to_string(), parse_commit(idx, settings, repo, &oid.to_string())?);
-        commit_count += 1;
-        let commit = repo.find_commit(oid)?;
-        let obj = repo.revparse_single(&commit.id().to_string())?;
-        let full_hash = commit.id().to_string();
-        let short_hash = obj.short_id()?.as_str().unwrap_or_default().to_string();
 
-        let mut parents: Vec<String> = vec![];
-        let a = match commit.parents().len() {
-            x if x == 1 => {
-                let parent = commit.parent(0).unwrap();
-                parents.push(parent.id().to_string());
-                Some(parent.tree()?)
-            }
-            x if x > 1 => {
-                for parent in commit.parents() {
-                    parents.push(parent.id().to_string());
-                }
-                let parent = commit.parent(0).unwrap();
-                Some(parent.tree()?)
-            }
-            _ => None,
-        };
-        let b = commit.tree()?;
-        let mut diffopts = DiffOptions::new();
-        let stats = match idx < settings.limit_diffs.unwrap_or(usize::MAX) {
-            true => {
-                let diff = repo.diff_tree_to_tree(a.as_ref(), Some(&b), Some(&mut diffopts))?;
-                let stats = diff.stats()?;
-                let stats = GitStats {
-                    files: stats.files_changed(),
-                    additions: stats.insertions(),
-                    deletions: stats.deletions(),
-                };
-                Some(stats)
-            },
-            false => {
-                None
-            },
-        };
+    // Figure out how many commits we have, to determine whether we
+    // should parallelize.  Unfortunately, git doesn't optimize for
+    // counting commits... this is a heavy operation.
+    let commit_count = {
+        let mut revwalk = repo.revwalk()?;
+        revwalk.set_sorting(git2::Sort::NONE)?;
+        // Using first parent counts the "mainline" commits, rather than
+        // the commits on the merged in branches.  These are also the
+        // commits thare a accessible via "HEAD~{N}" references.
+        revwalk.simplify_first_parent()?;
+        revwalk.push(branch_obj.id())?;
+        revwalk.count().min(settings.limit_history.unwrap_or(usize::MAX))
+    };
 
-        let alt_refs: Vec<String> = references
-            .get(&commit.id().to_string())
-            .map(|x| x.to_owned())
-            .unwrap_or_default();
+    // Let's arbitrarily say it's not worth parallelizing unless we
+    // can give all cores at least 1k commits to parse.  This could
+    // certainly use some configurability...
+    let thread_jobs = match rayon::current_num_threads() > 1 &&
+        commit_count > 1000 * rayon::current_num_threads() {
+        // Divide a chunk up into even smaller units, so each core
+        // runs about 10.  This makes it more efficient to detect when
+        // the commit limit is reached and short-circuit.
+        true => rayon::current_num_threads() * 10,
+        false => 1,
+    };
 
-        if history_count < settings.limit_history.unwrap_or(usize::MAX) {
-            loudest!("   + {} {}", full_hash, first_line(commit.message_bytes()));
-            // TODO: this is basically a duplicate of the commit
-            // array, and really should be pointers to that array
-            // instead.  But it's not a quick task to switch to
-            // self-referential data structures in Rust.
-            history.push(GitObject {
-                full_hash,
-                short_hash,
-                ts_utc: commit.author().when().seconds(),
-                ts_offset: (commit.author().when().offset_minutes() as i64) * 60,
-                parents,
-                ref_name: None,
-                alt_refs,
-                author: GitAuthor {
-                    name: commit.author().name().map(|x| x.to_owned()),
-                    email: commit.author().email().map(|x| x.to_owned()),
-                },
-                summary: Some(first_line(commit.message_bytes())),
-                stats,
-                ..Default::default()
-            });
-            history_count += 1;
-        }
+    // Chunk size is only an estimate, since we used
+    // simplify_first_parent() above, and do not use it below.  Each
+    // thread will include `chunk_size` direct parent commits, *plus*
+    // all commits from branches that merged into that range.  This
+    // might not be evenly distributed.
+    let chunk_size = ((commit_count as f64) / (thread_jobs as f64)).ceil() as usize;
+    if thread_jobs > 1 {
+        loud!(" - splitting {} commits across {} threads of approximate size {}", commit_count, thread_jobs, chunk_size);
     }
-    loud!(" - parsed {} history entries", history_count);
-    loud!(" - parsed {} commits", commit_count);
+
+    let repo_path = repo.path();
+
+    let thread_jobs: Vec<usize> = (0..thread_jobs).rev().collect(); // note the subtle rev() to do this in the right order
+    let atomic_commits = AtomicUsize::new(0);
+    let mut history: Vec<_> = thread_jobs.par_iter().try_fold(|| Vec::<_>::new(), |mut acc, thread| {
+        if atomic_commits.load(Ordering::SeqCst) > settings.limit_history.unwrap_or(usize::MAX) {
+            // TODO: should convert all error paths in this function
+            // to GitsyErrors, and differentiate between real failures
+            // and soft limits.  For now, they're all stop processing,
+            // but don't raise any errors.  Here, we take advantage of
+            // that.
+            return Err(git2::Error::from_str("history limit reached"));
+        }
+        let repo = Repository::open(repo_path)?;
+        let mut revwalk = repo.revwalk()?;
+        // TODO: TOPOLOGICAL might be better, but it's also ungodly slow
+        // on large repos.  Maybe this should be configurable.
+        //
+        //revwalk.set_sorting(git2::Sort::TOPOLOGICAL)?;
+        revwalk.set_sorting(git2::Sort::NONE)?;
+        let start_commit = match (chunk_size * thread) + 1 > commit_count {
+            true => 1,
+            false => commit_count - 1 - (chunk_size * thread),
+        };
+        let end_commit = match chunk_size > start_commit {
+            true => "".into(),
+            false => format!("~{}", start_commit - chunk_size),
+        };
+        let range = format!("{}~{}..{}{}",
+                            branch_name, start_commit,
+                            branch_name, end_commit);
+        loud!(" - Parse range: {} on thread {}", range, thread);
+        match *thread == 0 {
+            true => {
+                // The last chunk gets a single ref instead of a
+                // range, because ranges can't seem to represent the
+                // very first commit in a repository...
+                let end_commit = format!("{}{}", branch_name, end_commit);
+                let branch_obj = repo.revparse_single(&end_commit).unwrap();
+                revwalk.push(branch_obj.id())?
+            },
+            false => revwalk.push_range(&range)?,
+        }
+        let res = parse_revwalk(&repo, revwalk, &references, &settings)?;
+        louder!(" - Parsed {} on thread {}", res.len(), thread);
+        atomic_commits.fetch_add(res.len(), Ordering::SeqCst);
+        acc.extend(res);
+        Ok(acc)
+    })
+        .map(|x: Result<Vec<GitObject>, Error>| x.ok())
+        .while_some()
+        .flatten_iter() // concatenate all of the vecs in series
+        .collect();
+    // Have to truncate, because the logic above can overshoot.
+    history.truncate(settings.limit_history.unwrap_or(usize::MAX));
+    let history_count = history.len();
+
+    // TODO: very inefficient memory usage: all commits are cloned.
+    // Also done linearly, so this takes some time for large repos.
+    for commit in &history {
+        let _ = commits.insert(commit.full_hash.clone(), commit.clone());
+    }
+
+    loud!(" - parsed {} commits", history_count);
 
     loudest!(" - Parsing branches:");
     for branch in repo.branches(None)? {
@@ -553,11 +582,17 @@ pub fn parse_repo(
 }
 
 pub fn parse_commit(idx: usize, settings: &GitsySettingsRepo,
-                    repo: &Repository, refr: &str) -> Result<GitObject, Error> {
+                    repo: &Repository, refr: &str,
+                    references: &BTreeMap<String, Vec<String>>) -> Result<GitObject, Error> {
     let obj = repo.revparse_single(refr)?;
     let commit = repo.find_commit(obj.id())?;
-    let mut parents: Vec<String> = vec![];
 
+    let alt_refs: Vec<String> = references
+        .get(&commit.id().to_string())
+        .map(|x| x.to_owned())
+        .unwrap_or_default();
+
+    let mut parents: Vec<String> = vec![];
     let a = match commit.parents().len() {
         x if x == 1 => {
             let parent = commit.parent(0).unwrap();
@@ -573,112 +608,126 @@ pub fn parse_commit(idx: usize, settings: &GitsySettingsRepo,
         }
         _ => None,
     };
-    let b = commit.tree()?;
-    let mut diffopts = DiffOptions::new();
-    diffopts.enable_fast_untracked_dirs(true);
-    let diff = repo.diff_tree_to_tree(a.as_ref(), Some(&b), Some(&mut diffopts))?;
-    let commit_diff: Option<GitDiffCommit> = match idx < settings.limit_diffs.unwrap_or(usize::MAX) {
-        true => {
-            let stats = diff.stats()?;
 
-            Some(GitDiffCommit {
-                file_count: stats.files_changed(),
+    let (stats, commit_diff) = match idx < settings.limit_diffs.unwrap_or(usize::MAX) {
+        false => {
+            (None, None)
+        },
+        true => {
+            let b = commit.tree()?;
+            let mut diffopts = DiffOptions::new();
+            diffopts.enable_fast_untracked_dirs(true);
+            let diff = repo.diff_tree_to_tree(a.as_ref(), Some(&b), Some(&mut diffopts))?;
+            let stats = diff.stats()?;
+            let commit_diff: Option<GitDiffCommit> = match idx < settings.limit_diffs.unwrap_or(usize::MAX) {
+                true => {
+                    Some(GitDiffCommit {
+                        file_count: stats.files_changed(),
+                        additions: stats.insertions(),
+                        deletions: stats.deletions(),
+                        ..Default::default()
+                    })
+                },
+                false => {
+                    None
+                }
+            };
+            let stats = GitStats {
+                files: stats.files_changed(),
                 additions: stats.insertions(),
                 deletions: stats.deletions(),
-                ..Default::default()
-            })
-        },
-        false => {
-            None
-        }
-    };
+            };
 
-    let commit_diff = match commit_diff {
-        None => None,
-        Some(mut commit_diff) => {
-            let files: Rc<RefCell<Vec<GitDiffFile>>> = Rc::new(RefCell::new(vec![]));
-            diff.foreach(
-                &mut |file, _progress| {
-                    let mut file_diff: GitDiffFile = Default::default();
-                    file_diff.newfile = match file.status() {
-                        git2::Delta::Deleted => "/dev/null".to_owned(),
-                        _ => file
-                            .new_file()
-                            .path()
-                            .map(|x| "b/".to_string() + &x.to_string_lossy())
-                            .unwrap_or("/dev/null".to_string()),
-                    };
-                    file_diff.oldfile = match file.status() {
-                        git2::Delta::Added => "/dev/null".to_owned(),
-                        _ => file
-                            .old_file()
-                            .path()
-                            .map(|x| "a/".to_string() + &x.to_string_lossy())
-                            .unwrap_or("/dev/null".to_string()),
-                    };
-                    file_diff.basefile = match file.status() {
-                        git2::Delta::Added => file
-                            .new_file()
-                            .path()
-                            .map(|x| x.to_string_lossy().to_string())
-                            .unwrap_or("/dev/null".to_string()),
-                        _ => file
-                            .old_file()
-                            .path()
-                            .map(|x| x.to_string_lossy().to_string())
-                            .unwrap_or("/dev/null".to_string()),
-                    };
-                    file_diff.oldid = file.old_file().id().to_string();
-                    file_diff.newid = file.new_file().id().to_string();
-                    files.borrow_mut().push(file_diff);
-                    true
-                },
-                None, // TODO: handle binary files?
-                Some(&mut |_file, hunk| {
-                    let mut files = files.borrow_mut();
-                    let file_diff: &mut GitDiffFile = files.last_mut().expect("Diff hunk not associated with a file!");
-                    let mut hunk_diff: GitDiffHunk = Default::default();
-                    hunk_diff.context = String::from_utf8_lossy(hunk.header()).to_string();
-                    file_diff.hunks.push(hunk_diff);
-                    true
-                }),
-                Some(&mut |_file, _hunk, line| {
-                    let mut files = files.borrow_mut();
-                    let file_diff: &mut GitDiffFile = files.last_mut().expect("Diff hunk not associated with a file!");
-                    let hunk_diff: &mut GitDiffHunk = file_diff
-                        .hunks
-                        .last_mut()
-                        .expect("Diff line not associated with a hunk!");
-                    let (kind, prefix) = match line.origin() {
-                        ' ' => ("ctx", " "),
-                        '-' => ("del", "-"),
-                        '+' => ("add", "+"),
-                        _ => ("other", " "),
-                    };
-                    match line.origin() {
-                        '-' => file_diff.deletions += 1,
-                        '+' => file_diff.additions += 1,
-                        _ => {}
+            let commit_diff = match commit_diff {
+                None => None,
+                Some(mut commit_diff) => {
+                    let files: Rc<RefCell<Vec<GitDiffFile>>> = Rc::new(RefCell::new(vec![]));
+                    diff.foreach(
+                        &mut |file, _progress| {
+                            let mut file_diff: GitDiffFile = Default::default();
+                            file_diff.newfile = match file.status() {
+                                git2::Delta::Deleted => "/dev/null".to_owned(),
+                                _ => file
+                                    .new_file()
+                                    .path()
+                                    .map(|x| "b/".to_string() + &x.to_string_lossy())
+                                    .unwrap_or("/dev/null".to_string()),
+                            };
+                            file_diff.oldfile = match file.status() {
+                                git2::Delta::Added => "/dev/null".to_owned(),
+                                _ => file
+                                    .old_file()
+                                    .path()
+                                    .map(|x| "a/".to_string() + &x.to_string_lossy())
+                                    .unwrap_or("/dev/null".to_string()),
+                            };
+                            file_diff.basefile = match file.status() {
+                                git2::Delta::Added => file
+                                    .new_file()
+                                    .path()
+                                    .map(|x| x.to_string_lossy().to_string())
+                                    .unwrap_or("/dev/null".to_string()),
+                                _ => file
+                                    .old_file()
+                                    .path()
+                                    .map(|x| x.to_string_lossy().to_string())
+                                    .unwrap_or("/dev/null".to_string()),
+                            };
+                            file_diff.oldid = file.old_file().id().to_string();
+                            file_diff.newid = file.new_file().id().to_string();
+                            files.borrow_mut().push(file_diff);
+                            true
+                        },
+                        None, // TODO: handle binary files?
+                        Some(&mut |_file, hunk| {
+                            let mut files = files.borrow_mut();
+                            let file_diff: &mut GitDiffFile = files.last_mut().expect("Diff hunk not associated with a file!");
+                            let mut hunk_diff: GitDiffHunk = Default::default();
+                            hunk_diff.context = String::from_utf8_lossy(hunk.header()).to_string();
+                            file_diff.hunks.push(hunk_diff);
+                            true
+                        }),
+                        Some(&mut |_file, _hunk, line| {
+                            let mut files = files.borrow_mut();
+                            let file_diff: &mut GitDiffFile = files.last_mut().expect("Diff hunk not associated with a file!");
+                            let hunk_diff: &mut GitDiffHunk = file_diff
+                                .hunks
+                                .last_mut()
+                                .expect("Diff line not associated with a hunk!");
+                            let (kind, prefix) = match line.origin() {
+                                ' ' => ("ctx", " "),
+                                '-' => ("del", "-"),
+                                '+' => ("add", "+"),
+                                _ => ("other", " "),
+                            };
+                            match line.origin() {
+                                '-' => file_diff.deletions += 1,
+                                '+' => file_diff.additions += 1,
+                                _ => {}
+                            }
+                            let line_diff = GitDiffLine {
+                                text: String::from_utf8_lossy(line.content()).to_string(),
+                                kind,
+                                prefix,
+                            };
+                            hunk_diff.lines.push(line_diff);
+                            true
+                        }),
+                    )?;
+
+                    match Rc::try_unwrap(files) {
+                        Ok(files) => {
+                            let files: Vec<GitDiffFile> = files.into_inner();
+                            commit_diff.files = files;
+                        }
+                        Err(_) => {}
                     }
-                    let line_diff = GitDiffLine {
-                        text: String::from_utf8_lossy(line.content()).to_string(),
-                        kind,
-                        prefix,
-                    };
-                    hunk_diff.lines.push(line_diff);
-                    true
-                }),
-            )?;
 
-            match Rc::try_unwrap(files) {
-                Ok(files) => {
-                    let files: Vec<GitDiffFile> = files.into_inner();
-                    commit_diff.files = files;
+                    Some(commit_diff)
                 }
-                Err(_) => {}
-            }
-            Some(commit_diff)
-        }
+            };
+            (Some(stats), commit_diff)
+        },
     };
 
     let tree = obj.peel_to_tree()?;
@@ -691,7 +740,7 @@ pub fn parse_commit(idx: usize, settings: &GitsySettingsRepo,
         tree_id: Some(tree.id().to_string()),
         parents,
         ref_name: None,
-        alt_refs: vec![],
+        alt_refs,
         author: GitAuthor {
             name: commit.author().name().map(|x| x.to_string()),
             email: commit.author().email().map(|x| x.to_string()),
@@ -702,9 +751,8 @@ pub fn parse_commit(idx: usize, settings: &GitsySettingsRepo,
         },
         summary: Some(first_line(commit.message_bytes())),
         message: commit.message().map(|x| x.to_string()),
-        stats: None,
+        stats,
         diff: commit_diff,
     };
-
     Ok(summary)
 }

@@ -51,13 +51,26 @@ use syntect::{
 };
 
 macro_rules! size_check {
-    ($settings:ident, $cur:expr, $total:expr, $action:expr) => {
+    ($settings:expr, $cur:expr, $total:expr, $action:expr) => {
         let cur: usize = $cur;
         if cur > $settings.limit_repo_size.unwrap_or(usize::MAX) {
             $action;
         }
         let total: usize = $total;
         if total.saturating_add($cur) > $settings.limit_total_size.unwrap_or(usize::MAX) {
+            $action;
+        }
+    };
+}
+
+macro_rules! size_check_atomic {
+    ($settings:expr, $cur:expr, $total:expr, $action:expr) => {
+        let cur: usize = $cur.load(Ordering::SeqCst);
+        if cur > $settings.limit_repo_size.unwrap_or(usize::MAX) {
+            $action;
+        }
+        let total: usize = $total.load(Ordering::SeqCst);
+        if total.saturating_add(cur) > $settings.limit_total_size.unwrap_or(usize::MAX) {
             $action;
         }
     };
@@ -331,7 +344,8 @@ impl GitsyGenerator {
         Ok(global_bytes)
     }
 
-    pub fn gen_summary(&self, ctx: &Context, parsed_repo: &GitRepo, _repo_desc: &GitsySettingsRepo, _repo: &Repository) -> Result<usize, GitsyError> {
+    pub fn gen_summary(&self, ctx: &Context, atomic_bytes: &AtomicUsize,
+                       parsed_repo: &GitRepo, repo_desc: &GitsySettingsRepo, _repo: &Repository) -> Result<usize, GitsyError> {
         let tera = self.tera.as_ref().expect("ERROR: generate called without a context!?");
         let mut repo_bytes = 0;
         for (templ_path, out_path) in self.settings.outputs.summary::<GitRepo>(Some(parsed_repo), None) {
@@ -339,28 +353,30 @@ impl GitsyGenerator {
             let out_path = out_path.to_str().expect(&format!("ERROR: a summary output path is invalid: {}", out_path.display()));
             match tera.render(templ_path, &ctx) {
                 Ok(rendered) => {
-                    repo_bytes +=
-                        self.write_rendered(&out_path, &rendered);
+                    let bytes = self.write_rendered(&out_path, &rendered);
+                    repo_bytes += bytes;
+                    atomic_bytes.fetch_add(bytes, Ordering::SeqCst);
                 }
                 Err(x) => match x.kind {
                     _ => error!("ERROR: {:?}", x),
                 },
             }
+            size_check_atomic!(repo_desc, atomic_bytes, self.total_bytes,
+                        return Err(GitsyError::kind(GitsyErrorKind::Settings, Some("ERROR: size limit exceeded"))));
         }
         Ok(repo_bytes)
     }
 
-    pub fn gen_history(&self, ctx: &Context, parsed_repo: &GitRepo, _repo_desc: &GitsySettingsRepo, _repo: &Repository) -> Result<usize, GitsyError> {
+    pub fn gen_history(&self, ctx: &Context, atomic_bytes: &AtomicUsize, parsed_repo: &GitRepo, repo_desc: &GitsySettingsRepo, _repo: &Repository) -> Result<usize, GitsyError> {
         let tera = self.tera.as_ref().expect("ERROR: generate called without a context!?");
-        let mut repo_bytes = 0;
+        let repo_bytes = AtomicUsize::new(0);
         for (templ_path, out_path) in self.settings.outputs.history::<GitRepo>(Some(parsed_repo), None) {
             let templ_path = templ_path.to_str().expect(&format!("ERROR: a summary template path is invalid: {}", templ_path.display()));
             let out_path = out_path.to_str().expect(&format!("ERROR: a summary output path is invalid: {}", out_path.display()));
-            let mut paged_ctx = ctx.clone();
-            paged_ctx.remove("history");
             let pages = parsed_repo.history.chunks(self.settings.paginate_history());
             let page_count = pages.len();
-            for (idx, page) in pages.enumerate() {
+            parsed_repo.history.par_chunks(self.settings.paginate_history()).enumerate().try_for_each(|(idx, page)| {
+                let mut paged_ctx = ctx.clone();
                 let pagination = Pagination::new(
                     idx + 1,
                     page_count,
@@ -368,27 +384,25 @@ impl GitsyGenerator {
                 );
                 paged_ctx.insert("page", &pagination.with_relative_paths());
                 paged_ctx.insert("history", &page);
-                match tera.render(templ_path, &paged_ctx) {
-                    Ok(rendered) => {
-                        repo_bytes += self.write_rendered(&pagination.cur_page, &rendered);
-                    }
-                    Err(x) => match x.kind {
-                        _ => error!("ERROR: {:?}", x),
-                    },
-                }
+                let rendered = tera.render(templ_path, &paged_ctx)?;
+                let bytes = self.write_rendered(&pagination.cur_page, &rendered);
+                repo_bytes.fetch_add(bytes, Ordering::SeqCst);
+                atomic_bytes.fetch_add(bytes, Ordering::SeqCst);
                 paged_ctx.remove("page");
                 paged_ctx.remove("history");
-            }
+                size_check_atomic!(repo_desc, atomic_bytes, self.total_bytes,
+                                   return Err(GitsyError::kind(GitsyErrorKind::Settings, Some("ERROR: size limit exceeded"))));
+                Ok::<(), GitsyError>(())
+            })?;
         }
-        Ok(repo_bytes)
+        Ok(repo_bytes.load(Ordering::SeqCst))
     }
 
-    pub fn gen_commit(&self, ctx: &Context, parsed_repo: &GitRepo, repo_desc: &GitsySettingsRepo, _repo: &Repository) -> Result<usize, GitsyError> {
+    pub fn gen_commit(&self, ctx: &Context, atomic_bytes: &AtomicUsize, parsed_repo: &GitRepo, repo_desc: &GitsySettingsRepo, _repo: &Repository) -> Result<usize, GitsyError> {
         let mut ctx = ctx.clone();
         let tera = self.tera.as_ref().expect("ERROR: generate called without a context!?");
         let mut repo_bytes = 0;
         for (_id, commit) in &parsed_repo.commits {
-            size_check!(repo_desc, repo_bytes, self.total_bytes.load(Ordering::Relaxed), break);
             ctx
                 .try_insert("commit", &commit)
                 .expect("Failed to add commit to template engine.");
@@ -397,8 +411,9 @@ impl GitsyGenerator {
                 let out_path = out_path.to_str().expect(&format!("ERROR: a summary output path is invalid: {}", out_path.display()));
                 match tera.render(templ_path, &ctx) {
                     Ok(rendered) => {
-                        repo_bytes += self
-                            .write_rendered(&out_path, &rendered);
+                        let bytes = self.write_rendered(&out_path, &rendered);
+                        repo_bytes += bytes;
+                        atomic_bytes.fetch_add(bytes, Ordering::SeqCst);
                     }
                     Err(x) => match x.kind {
                         _ => error!("ERROR: {:?}", x),
@@ -406,11 +421,13 @@ impl GitsyGenerator {
                 }
             }
             ctx.remove("commit");
+            size_check_atomic!(repo_desc, atomic_bytes, self.total_bytes,
+                               return Err(GitsyError::kind(GitsyErrorKind::Settings, Some("ERROR: size limit exceeded"))));
         }
         Ok(repo_bytes)
     }
 
-    pub fn gen_branches(&self, ctx: &Context, parsed_repo: &GitRepo, _repo_desc: &GitsySettingsRepo, _repo: &Repository) -> Result<usize, GitsyError> {
+    pub fn gen_branches(&self, ctx: &Context, atomic_bytes: &AtomicUsize, parsed_repo: &GitRepo, repo_desc: &GitsySettingsRepo, _repo: &Repository) -> Result<usize, GitsyError> {
         let tera = self.tera.as_ref().expect("ERROR: generate called without a context!?");
         let mut repo_bytes = 0;
         for (templ_path, out_path) in self.settings.outputs.branches::<GitRepo>(Some(parsed_repo), None) {
@@ -430,7 +447,9 @@ impl GitsyGenerator {
                 paged_ctx.insert("branches", &page);
                 match tera.render(templ_path, &paged_ctx) {
                     Ok(rendered) => {
-                        repo_bytes += self.write_rendered(&pagination.cur_page, &rendered);
+                        let bytes = self.write_rendered(&pagination.cur_page, &rendered);
+                        repo_bytes += bytes;
+                        atomic_bytes.fetch_add(bytes, Ordering::SeqCst);
                     }
                     Err(x) => match x.kind {
                         _ => error!("ERROR: {:?}", x),
@@ -439,24 +458,27 @@ impl GitsyGenerator {
                 paged_ctx.remove("page");
                 paged_ctx.remove("branches");
             }
+            size_check_atomic!(repo_desc, atomic_bytes, self.total_bytes,
+                               return Err(GitsyError::kind(GitsyErrorKind::Settings, Some("ERROR: size limit exceeded"))));
         }
         Ok(repo_bytes)
     }
 
-    pub fn gen_branch(&self, ctx: &Context, parsed_repo: &GitRepo, repo_desc: &GitsySettingsRepo, _repo: &Repository) -> Result<usize, GitsyError> {
+    pub fn gen_branch(&self, ctx: &Context, atomic_bytes: &AtomicUsize, parsed_repo: &GitRepo, repo_desc: &GitsySettingsRepo, _repo: &Repository) -> Result<usize, GitsyError> {
         let mut ctx = ctx.clone();
         let tera = self.tera.as_ref().expect("ERROR: generate called without a context!?");
         let mut repo_bytes = 0;
         for branch in &parsed_repo.branches {
-            size_check!(repo_desc, repo_bytes, self.total_bytes.load(Ordering::Relaxed), break);
             ctx.insert("branch", branch);
             for (templ_path, out_path) in self.settings.outputs.branch(Some(parsed_repo), Some(branch)) {
                 let templ_path = templ_path.to_str().expect(&format!("ERROR: a summary template path is invalid: {}", templ_path.display()));
                 let out_path = out_path.to_str().expect(&format!("ERROR: a summary output path is invalid: {}", out_path.display()));
                 match tera.render(templ_path, &ctx) {
                     Ok(rendered) => {
-                        repo_bytes += self
+                        let bytes = self
                             .write_rendered(&out_path, &rendered);
+                        repo_bytes += bytes;
+                        atomic_bytes.fetch_add(bytes, Ordering::SeqCst);
                     }
                     Err(x) => match x.kind {
                         _ => error!("ERROR: {:?}", x),
@@ -464,11 +486,13 @@ impl GitsyGenerator {
                 }
             }
             ctx.remove("branch");
+            size_check_atomic!(repo_desc, atomic_bytes, self.total_bytes,
+                               return Err(GitsyError::kind(GitsyErrorKind::Settings, Some("ERROR: size limit exceeded"))));
         }
         Ok(repo_bytes)
     }
 
-    pub fn gen_tags(&self, ctx: &Context, parsed_repo: &GitRepo, _repo_desc: &GitsySettingsRepo, _repo: &Repository) -> Result<usize, GitsyError> {
+    pub fn gen_tags(&self, ctx: &Context, atomic_bytes: &AtomicUsize, parsed_repo: &GitRepo, repo_desc: &GitsySettingsRepo, _repo: &Repository) -> Result<usize, GitsyError> {
         let tera = self.tera.as_ref().expect("ERROR: generate called without a context!?");
         let mut repo_bytes = 0;
         for (templ_path, out_path) in self.settings.outputs.tags::<GitRepo>(Some(parsed_repo), None) {
@@ -485,7 +509,9 @@ impl GitsyGenerator {
                 paged_ctx.insert("tags", &page);
                 match tera.render(templ_path, &paged_ctx) {
                     Ok(rendered) => {
-                        repo_bytes += self.write_rendered(&pagination.cur_page, &rendered);
+                        let bytes = self.write_rendered(&pagination.cur_page, &rendered);
+                        repo_bytes += bytes;
+                        atomic_bytes.fetch_add(bytes, Ordering::SeqCst);
                     }
                     Err(x) => match x.kind {
                         _ => error!("ERROR: {:?}", x),
@@ -493,17 +519,18 @@ impl GitsyGenerator {
                 }
                 paged_ctx.remove("page");
                 paged_ctx.remove("tags");
+                size_check_atomic!(repo_desc, atomic_bytes, self.total_bytes,
+                                   return Err(GitsyError::kind(GitsyErrorKind::Settings, Some("ERROR: size limit exceeded"))));
             }
         }
         Ok(repo_bytes)
     }
 
-    pub fn gen_tag(&self, ctx: &Context, parsed_repo: &GitRepo, repo_desc: &GitsySettingsRepo, _repo: &Repository) -> Result<usize, GitsyError> {
+    pub fn gen_tag(&self, ctx: &Context, atomic_bytes: &AtomicUsize, parsed_repo: &GitRepo, repo_desc: &GitsySettingsRepo, _repo: &Repository) -> Result<usize, GitsyError> {
         let mut ctx = ctx.clone();
         let tera = self.tera.as_ref().expect("ERROR: generate called without a context!?");
         let mut repo_bytes = 0;
         for tag in &parsed_repo.tags {
-            size_check!(repo_desc, repo_bytes, self.total_bytes.load(Ordering::Relaxed), break);
             ctx.insert("tag", tag);
             if let Some(tagged_id) = tag.tagged_id.as_ref() {
                 if let Some(commit) = parsed_repo.commits.get(tagged_id) {
@@ -515,8 +542,10 @@ impl GitsyGenerator {
                 let out_path = out_path.to_str().expect(&format!("ERROR: a summary output path is invalid: {}", out_path.display()));
                 match tera.render(templ_path, &ctx) {
                     Ok(rendered) => {
-                        repo_bytes +=
+                        let bytes =
                             self.write_rendered(&out_path, &rendered);
+                        repo_bytes += bytes;
+                        atomic_bytes.fetch_add(bytes, Ordering::SeqCst);
                     }
                     Err(x) => match x.kind {
                         _ => error!("ERROR: {:?}", x),
@@ -525,11 +554,13 @@ impl GitsyGenerator {
             }
             ctx.remove("tag");
             ctx.remove("commit");
+            size_check_atomic!(repo_desc, atomic_bytes, self.total_bytes,
+                               return Err(GitsyError::kind(GitsyErrorKind::Settings, Some("ERROR: size limit exceeded"))));
         }
         Ok(repo_bytes)
     }
 
-    pub fn gen_files(&self, ctx: &Context, parsed_repo: &GitRepo, _repo_desc: &GitsySettingsRepo, _repo: &Repository) -> Result<usize, GitsyError> {
+    pub fn gen_files(&self, ctx: &Context, atomic_bytes: &AtomicUsize, parsed_repo: &GitRepo, repo_desc: &GitsySettingsRepo, _repo: &Repository) -> Result<usize, GitsyError> {
         let mut ctx = ctx.clone();
         let tera = self.tera.as_ref().expect("ERROR: generate called without a context!?");
         let mut repo_bytes = 0;
@@ -540,18 +571,22 @@ impl GitsyGenerator {
             ctx.insert("all_files", &parsed_repo.all_files);
             match tera.render(templ_path, &ctx) {
                 Ok(rendered) => {
-                    repo_bytes +=
+                    let bytes =
                         self.write_rendered(&out_path, &rendered);
+                    repo_bytes += bytes;
+                    atomic_bytes.fetch_add(bytes, Ordering::SeqCst);
                 }
                 Err(x) => match x.kind {
                     _ => error!("ERROR: {:?}", x),
                 },
             }
+            size_check_atomic!(repo_desc, atomic_bytes, self.total_bytes,
+                               return Err(GitsyError::kind(GitsyErrorKind::Settings, Some("ERROR: size limit exceeded"))));
         }
         Ok(repo_bytes)
     }
 
-    pub fn gen_file(&self, ctx: &Context, parsed_repo: &GitRepo, repo_desc: &GitsySettingsRepo, repo: &Repository) -> Result<usize, GitsyError> {
+    pub fn gen_file(&self, ctx: &Context, atomic_bytes: &AtomicUsize, parsed_repo: &GitRepo, repo_desc: &GitsySettingsRepo, repo: &Repository) -> Result<usize, GitsyError> {
         let tera = self.tera.as_ref().expect("ERROR: generate called without a context!?");
         let mut repo_bytes = 0;
 
@@ -569,14 +604,16 @@ impl GitsyGenerator {
                 .expect("Invalid syntax highlighting theme specified.");
             let css: String = css_for_theme_with_class_style(theme, syntect::html::ClassStyle::Spaced)
                 .expect("Invalid syntax highlighting theme specified.");
-            repo_bytes +=
+            let bytes =
                 self.write_rendered(&self.settings.outputs.syntax_css::<GitFile>(Some(&parsed_repo), None), css.as_str());
+            repo_bytes += bytes;
+            atomic_bytes.fetch_add(bytes, Ordering::SeqCst);
         }
 
         // TODO: parallelize the rest of the processing steps.  This one is
         // done first because syntax highlighting is very slow.
         let files: Vec<&GitFile> = parsed_repo.all_files.iter().filter(|x| x.kind == "file").collect();
-        let atomic_bytes: AtomicUsize = AtomicUsize::new(repo_bytes);
+        let atomic_repo_bytes: AtomicUsize = AtomicUsize::new(repo_bytes);
         let repo_path = repo.path().to_str().expect("ERROR: unable to determine path to local repository");
         let _ = files
             .par_iter()
@@ -588,8 +625,8 @@ impl GitsyGenerator {
                     let mut ctx = ctx.clone();
 
                     let mut local_bytes = 0;
-                    let cur_repo_bytes = atomic_bytes.load(Ordering::Relaxed);
-                    size_check!(repo_desc, cur_repo_bytes, self.total_bytes.load(Ordering::Relaxed), return None);
+                    let cur_repo_bytes = atomic_repo_bytes.load(Ordering::SeqCst);
+                    size_check!(repo_desc, cur_repo_bytes, self.total_bytes.load(Ordering::SeqCst), return None);
                     let file = match file.size < repo_desc.limit_file_size.unwrap_or(usize::MAX) {
                         true => GitsyGenerator::fill_file_contents(&repo, &file, &repo_desc)
                             .expect("Failed to parse file."),
@@ -604,7 +641,8 @@ impl GitsyGenerator {
                         match tera.render(templ_path, &ctx) {
                             Ok(rendered) => {
                                 local_bytes = self.write_rendered(&out_path, &rendered,);
-                                atomic_bytes.fetch_add(local_bytes, Ordering::Relaxed);
+                                atomic_repo_bytes.fetch_add(local_bytes, Ordering::SeqCst);
+                                atomic_bytes.fetch_add(local_bytes, Ordering::SeqCst);
                             }
                             Err(x) => match x.kind {
                                 _ => error!("ERROR: {:?}", x),
@@ -612,21 +650,25 @@ impl GitsyGenerator {
                         }
                     }
                     ctx.remove("file");
+                    if atomic_repo_bytes.load(Ordering::SeqCst) >= repo_desc.limit_repo_size.unwrap_or(usize::MAX) {
+                        return None;
+                    }
                     Some(acc.unwrap() + local_bytes)
                 },
             )
             .while_some() // allow short-circuiting if size limit is reached
             .sum::<usize>();
-        repo_bytes = atomic_bytes.load(Ordering::Relaxed);
+        repo_bytes = atomic_repo_bytes.load(Ordering::SeqCst);
+        size_check_atomic!(repo_desc, atomic_bytes, self.total_bytes,
+                           return Err(GitsyError::kind(GitsyErrorKind::Settings, Some("ERROR: size limit exceeded"))));
         Ok(repo_bytes)
     }
 
-    pub fn gen_dir(&self, ctx: &Context, parsed_repo: &GitRepo, repo_desc: &GitsySettingsRepo, repo: &Repository) -> Result<usize, GitsyError> {
+    pub fn gen_dir(&self, ctx: &Context, atomic_bytes: &AtomicUsize, parsed_repo: &GitRepo, repo_desc: &GitsySettingsRepo, repo: &Repository) -> Result<usize, GitsyError> {
         let mut ctx = ctx.clone();
         let tera = self.tera.as_ref().expect("ERROR: generate called without a context!?");
         let mut repo_bytes = 0;
         for dir in parsed_repo.all_files.iter().filter(|x| x.kind == "dir") {
-            size_check!(repo_desc, repo_bytes, self.total_bytes.load(Ordering::Relaxed), break);
             let listing = dir_listing(&repo, &dir).expect("Failed to parse file.");
             ctx.insert("dir", dir);
             ctx
@@ -637,8 +679,10 @@ impl GitsyGenerator {
                 let out_path = out_path.to_str().expect(&format!("ERROR: a summary output path is invalid: {}", out_path.display()));
                 match tera.render(templ_path, &ctx) {
                     Ok(rendered) => {
-                        repo_bytes +=
+                        let bytes =
                             self.write_rendered(&out_path, &rendered);
+                        repo_bytes += bytes;
+                        atomic_bytes.fetch_add(bytes, Ordering::SeqCst);
                     }
                     Err(x) => match x.kind {
                         _ => error!("ERROR: {:?}", x),
@@ -647,6 +691,8 @@ impl GitsyGenerator {
             }
             ctx.remove("files");
             ctx.remove("dir");
+            size_check_atomic!(repo_desc, atomic_bytes, self.total_bytes,
+                               return Err(GitsyError::kind(GitsyErrorKind::Settings, Some("ERROR: size limit exceeded"))));
         }
         Ok(repo_bytes)
     }
@@ -704,12 +750,92 @@ impl GitsyGenerator {
         Ok(bytes)
     }
 
+    pub fn generate_repo(&self, repo_desc: &GitsySettingsRepo, pad_name_len: usize) -> Result<(GitRepo, usize), GitsyError> {
+        loudest!("Repo settings:\n{:#?}", &repo_desc);
+        let start_repo = Instant::now();
+
+        let name = repo_desc.name.as_deref().expect("A configured repository has no name!");
+        if self.settings.threads.unwrap_or(0) == 1 || VERBOSITY.load(Ordering::SeqCst) > 1 {
+            normal_noln!("[{}{}]... ", name, " ".repeat(pad_name_len - name.len()));
+        }
+        let repo_path = self.find_repo(&name, &repo_desc)?;
+        let repo = Repository::open(&repo_path).expect("Unable to find git repository.");
+
+        let metadata = GitsyMetadata {
+            full_name: repo_desc.name.clone(),
+            description: repo_desc.description.clone(),
+            website: repo_desc.website.clone(),
+            clone: repo_desc.clone_url.clone(),
+            attributes: repo_desc.attributes.clone().unwrap_or_default(),
+        };
+        let parsed_repo = parse_repo(&repo, &name, &repo_desc, metadata).expect("Failed to analyze repo HEAD.");
+        let minimized_repo = parsed_repo.minimal_clone(self.settings.limit_context.unwrap_or(usize::MAX));
+        let atomic_bytes = AtomicUsize::new(0);
+
+        let mut local_ctx = self.new_context(Some(&minimized_repo))?;
+
+        // Add README file to context, if specified and found
+        if let Some(readmes) = &repo_desc.readme_files {
+            for readme in readmes {
+                if let Some(file) = parsed_repo.root_files.iter().filter(|x| &x.name == readme).next() {
+                    louder!(" - found readme file: {}", file.name);
+                    let _ = GitsyGenerator::fill_file_contents(&repo, &file, &repo_desc)
+                        .expect("Failed to parse file.");
+                    local_ctx.insert("readme", &file);
+                    break;
+                }
+            }
+        };
+
+        let fns = &[GitsyGenerator::gen_summary,
+                    GitsyGenerator::gen_branches,
+                    GitsyGenerator::gen_branch,
+                    GitsyGenerator::gen_tags,
+                    GitsyGenerator::gen_tag,
+                    GitsyGenerator::gen_history,
+                    GitsyGenerator::gen_commit,
+                    GitsyGenerator::gen_file,
+                    GitsyGenerator::gen_dir,
+                    GitsyGenerator::gen_files,
+        ];
+
+        let repo_bytes: usize = fns.par_iter().try_fold(
+            || 0,
+            |acc, x| {
+                let repo = Repository::open(&repo_path).expect("Unable to find git repository.");
+                let bytes = x(&self, &local_ctx, &atomic_bytes, &parsed_repo, repo_desc, &repo)?;
+                // remove these bytes from the current repo bytes and move them to the total bytes.
+                atomic_bytes.fetch_sub(bytes, Ordering::SeqCst);
+                self.total_bytes.fetch_add(bytes, Ordering::SeqCst);
+                Ok::<usize, GitsyError>(acc + bytes)
+            })
+            .try_reduce(|| 0, |acc, x| Ok(acc + x))?;
+
+        size_check!(repo_desc, 0, self.total_bytes.load(Ordering::SeqCst),
+                    return Err(GitsyError::kind(GitsyErrorKind::Settings, Some("ERROR: size limit exceeded"))));
+
+        self.copy_assets(Some(&repo_desc), Some(&parsed_repo), Some(&repo))?;
+
+        normal!(
+            "{}{}done in {:.2}s ({} bytes)",
+            match self.settings.threads.unwrap_or(0) == 1 && VERBOSITY.load(Ordering::SeqCst) <= 1 {
+                true => "".into(),
+                false => format!("[{}{}]... ", name, " ".repeat(pad_name_len - name.len())),
+            },
+            match VERBOSITY.load(Ordering::SeqCst) > 1 {
+                true => " - ",
+                _ => "",
+            },
+            start_repo.elapsed().as_secs_f32(),
+            repo_bytes
+        );
+        Ok((minimized_repo, repo_bytes))
+    }
+
     pub fn generate(&mut self) -> Result<(), GitsyError> {
         let start_all = Instant::now();
         self.tera = Some(self.tera_init()?);
         self.generated_dt = chrono::offset::Local::now();
-        let mut total_bytes = 0;
-        let mut repos: Vec<GitRepo> = vec![];
 
         if self.cli.should_clean {
             self.settings.outputs.clean();
@@ -744,68 +870,55 @@ impl GitsyGenerator {
 
         loudest!("Global settings:\n{:#?}", &self.settings);
 
+        let shared_repos = std::sync::Mutex::new(Vec::<GitRepo>::new());
+
         // Iterate over each repository, generating outputs
-        for repo_desc in &repo_vec {
-            loudest!("Repo settings:\n{:#?}", &repo_desc);
-            let start_repo = Instant::now();
-            let mut repo_bytes = 0;
-
-            let name = repo_desc.name.as_deref().expect("A configured repository has no name!");
-            normal_noln!("[{}{}]... ", name, " ".repeat(longest_repo_name - name.len()));
-            let repo_path = self.find_repo(&name, &repo_desc)?;
-            let repo = Repository::open(&repo_path).expect("Unable to find git repository.");
-
-            let metadata = GitsyMetadata {
-                full_name: repo_desc.name.clone(),
-                description: repo_desc.description.clone(),
-                website: repo_desc.website.clone(),
-                clone: repo_desc.clone_url.clone(),
-                attributes: repo_desc.attributes.clone().unwrap_or_default(),
-            };
-            let parsed_repo = parse_repo(&repo, &name, &repo_desc, metadata).expect("Failed to analyze repo HEAD.");
-            let minimized_repo = parsed_repo.minimal_clone(self.settings.limit_context.unwrap_or(usize::MAX));
-
-            let mut local_ctx = self.new_context(Some(&minimized_repo))?;
-
-            // Add README file to context, if specified and found
-            if let Some(readmes) = &repo_desc.readme_files {
-                for readme in readmes {
-                    if let Some(file) = parsed_repo.root_files.iter().filter(|x| &x.name == readme).next() {
-                        louder!(" - found readme file: {}", file.name);
-                        let _ = GitsyGenerator::fill_file_contents(&repo, &file, &repo_desc)
-                            .expect("Failed to parse file.");
-                        local_ctx.insert("readme", &file);
-                        break;
-                    }
+        let mut total_bytes = match self.settings.threads.unwrap_or(0) {
+            n if n == 1 => {
+                let mut tb = 0;
+                for repo_desc in &repo_vec {
+                    let (minimized_repo, repo_bytes) = self.generate_repo(repo_desc, longest_repo_name)?;
+                    size_check!(repo_desc, 0, tb,
+                                return Err(GitsyError::kind(GitsyErrorKind::Settings, Some("ERROR: site size limit exceeded"))));
+                    shared_repos.lock().unwrap().push(minimized_repo);
+                    tb += repo_bytes;
                 }
-            };
+                tb
+            },
+            n if n == 0 => {
+                let total_bytes: usize = repo_vec.par_iter().try_fold(|| 0, |acc, repo_desc| {
+                    let (minimized_repo, repo_bytes) = self.generate_repo(repo_desc, longest_repo_name)?;
+                    size_check!(repo_desc, 0, acc + repo_bytes, return Err(GitsyError::kind(GitsyErrorKind::Unknown,
+                                                                                            Some("ERROR: site size limit exceeded"))));
+                    shared_repos.lock().unwrap().push(minimized_repo);
+                    Ok::<usize, GitsyError>(repo_bytes)
+                })
+                    .try_reduce(|| 0, |acc, x| Ok(acc + x))?;
+                total_bytes
+            },
+            n => {
+                let pool = rayon::ThreadPoolBuilder::new()
+                    .num_threads(n)
+                    .build().unwrap();
 
-            repo_bytes += self.gen_summary( &local_ctx, &parsed_repo, repo_desc, &repo)?;
-            repo_bytes += self.gen_branches(&local_ctx, &parsed_repo, repo_desc, &repo)?;
-            repo_bytes += self.gen_branch(  &local_ctx, &parsed_repo, repo_desc, &repo)?;
-            repo_bytes += self.gen_tags(    &local_ctx, &parsed_repo, repo_desc, &repo)?;
-            repo_bytes += self.gen_tag(     &local_ctx, &parsed_repo, repo_desc, &repo)?;
-            repo_bytes += self.gen_history( &local_ctx, &parsed_repo, repo_desc, &repo)?;
-            repo_bytes += self.gen_commit(  &local_ctx, &parsed_repo, repo_desc, &repo)?;
-            repo_bytes += self.gen_file(    &local_ctx, &parsed_repo, repo_desc, &repo)?;
-            repo_bytes += self.gen_dir(     &local_ctx, &parsed_repo, repo_desc, &repo)?;
-            repo_bytes += self.gen_files(   &local_ctx, &parsed_repo, repo_desc, &repo)?;
+                let total_bytes = pool.install(|| {
+                        let total_bytes: usize = repo_vec.par_iter().try_fold(|| 0, |acc, repo_desc| {
+                            let (minimized_repo, repo_bytes) = self.generate_repo(repo_desc, longest_repo_name)?;
+                            size_check!(repo_desc, 0, acc + repo_bytes, return Err(GitsyError::kind(GitsyErrorKind::Unknown,
+                                                                                                    Some("ERROR: site size limit exceeded"))));
+                            shared_repos.lock().unwrap().push(minimized_repo);
+                            Ok::<usize, GitsyError>(repo_bytes)
+                        })
+                        .try_reduce(|| 0, |acc, x| Ok(acc + x))?;
+                    Ok::<usize, GitsyError>(total_bytes)
+                })?;
+                total_bytes
+            }
+        };
+        size_check!(self.settings, 0, total_bytes, return Err(GitsyError::kind(GitsyErrorKind::Unknown,
+                                                                               Some("ERROR: site size limit exceeded"))));
 
-            self.copy_assets(Some(&repo_desc), Some(&parsed_repo), Some(&repo))?;
-
-            repos.push(minimized_repo);
-            normal!(
-                "{}done in {:.2}s ({} bytes)",
-                match VERBOSITY.load(Ordering::Relaxed) > 1 {
-                    true => " - ",
-                    _ => "",
-                },
-                start_repo.elapsed().as_secs_f32(),
-                repo_bytes
-            );
-            total_bytes += repo_bytes;
-            size_check!(repo_desc, 0, total_bytes, break); // break if total is exceeded
-        }
+        let repos = shared_repos;
 
         let start_global = Instant::now();
         normal_noln!(
@@ -823,6 +936,8 @@ impl GitsyGenerator {
         self.copy_assets(None, None, None)?;
 
         total_bytes += global_bytes;
+        size_check!(self.settings, 0, total_bytes, return Err(GitsyError::kind(GitsyErrorKind::Unknown,
+                                                                               Some("ERROR: site size limit exceeded"))));
         normal!(
             "done in {:.2}s ({} bytes)",
             start_global.elapsed().as_secs_f32(),

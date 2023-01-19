@@ -75,18 +75,34 @@ macro_rules! loudest {
     ($($arg:tt)*) => {{ if crate::util::VERBOSITY.load(Ordering::Relaxed) > 3 { println!($($arg)*); } }};
 }
 
+#[derive(Default, Clone)]
 #[allow(dead_code)]
 pub enum GitsyErrorKind {
+    #[default]
     Unknown,
     Settings,
     Template,
     Git,
 }
+
+#[derive(Default)]
 pub struct GitsyError {
     msg: Option<String>,
     kind: GitsyErrorKind,
     source: Option<Box<dyn std::error::Error>>,
 }
+unsafe impl Send for GitsyError {}
+
+impl Clone for GitsyError {
+    fn clone(&self) -> Self {
+        GitsyError {
+            msg: self.msg.clone(),
+            kind: self.kind.clone(),
+            source: None,
+        }
+    }
+}
+
 #[allow(dead_code)]
 impl GitsyError {
     pub fn kind(kind: GitsyErrorKind, msg: Option<&str>) -> Self {
@@ -107,6 +123,9 @@ impl GitsyError {
 impl std::fmt::Display for GitsyError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.kind {
+            GitsyErrorKind::Git => write!(f, "gitsy error (git)")?,
+            GitsyErrorKind::Settings => write!(f, "gitsy error (settings)")?,
+            GitsyErrorKind::Template => write!(f, "gitsy error (template)")?,
             _ => write!(f, "gitsy error (unknown)")?,
         }
         write!(f, ": {}", self.msg.as_deref().unwrap_or_default())

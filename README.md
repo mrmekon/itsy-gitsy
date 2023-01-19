@@ -177,15 +177,13 @@ As always, if security is a concern, best practice is to follow the rules of lea
 
 ## Performance
 
-High performance is not a primary goal of Itsy-Gitsy, since it is mostly intended for indexing small personal projects, but various settings are provided to allow it to handle large repositories.
-
-The majority of parsing and generation is linear and single-threaded, except for rendering file content output.  File contents are rendered in parallel, including syntax highlighting and Markdown rendering.
+High performance is not a primary goal of Itsy-Gitsy, since it is mostly intended for indexing small personal projects, but various settings are provided to allow it to handle large repositories.  Most operations take advantage of parallelism.  By default, Itsy-Gitsy splits the tasks across all cores, but the number of parallel threads can be reduced in the configuration file.
 
 Syntax highlighting uses syntect's pure-Rust implementation by default, to avoid an extra dependency.  This implementation is quite slow, and performance can be greatly improved by using syntect's `onig` mode, which uses the faster Oniguruma C library for highlighting.  This can be enabled at build time with `cargo build --features highlight_fast`.
 
 All metadata of all repositories, except for file contents, is held in memory.  Large repositories can easily exhaust memory, and disk usage can also get quite high.  There are several `limit_*` settings available in the configuration for restricting the amount of data held in memory, with the tradeoff of reducing the amount of data available for the generated output.  `limit_context` and `limit_diffs` are particularly important restrictions to set on repositories with thousands of commits.
 
-Small repositories with dozens to hundreds of commits can be generated on the order of a few seconds or less.  Large repositories take *considerably* longer; parsing 1,000,000 commits from the Linux kernel repository with `limit_tree_depth = 3`, `limit_context = 10` and `limit_diffs = 100` took ~30 minutes on a fast laptop, and produced a ~2GB website.
+Small repositories with dozens to hundreds of commits can be generated on the order of a few seconds or less.  Large repositories take *considerably* longer; parsing 1,115,000 commits from the Linux kernel repository with `limit_tree_depth = 3`, `limit_context = 100` and `limit_diffs = 0` took ~25 minutes on a fast laptop, and produced a ~5.6GB website.  Peak memory usage was 8GB.
 
 ## Other Considerations
 

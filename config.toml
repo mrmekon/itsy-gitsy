@@ -159,6 +159,15 @@ syntax_highlight = true
 #
 syntax_highlight_theme = "base16-ocean.light"
 
+# Number of threads to use for parallel processing
+#
+# Specify a specify a specific number of threads/cores to split
+# parallel processing across, or set to 0 to auto-detect.
+#
+# The most practical values here are 0 (auto-detect, which typically
+# means use all cores), or 1 (to disable parallelism).
+threads = 0
+
 # Limits maximum number of history items (i.e. git log) to parse.
 #
 # After the limit is reached, no more history items will be processed or stored
