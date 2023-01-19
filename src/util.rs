@@ -160,12 +160,9 @@ pub fn sanitize_path_component(var: &str) -> String {
 }
 
 pub fn urlify_path(path: &str) -> String {
-    let path = path
-        .replace("/", "+")
-        .replace("\\", "+");
+    let path = path.replace("/", "+").replace("\\", "+");
     path.trim().to_string()
 }
-
 
 pub trait SafePathVar {
     fn safe_substitute(&self, path: &impl AsRef<Path>) -> PathBuf;

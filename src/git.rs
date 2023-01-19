@@ -21,16 +21,16 @@
  * along with Itsy-Gitsy.  If not, see <http://www.gnu.org/licenses/>.
  */
 use crate::settings::GitsySettingsRepo;
-use crate::util::{sanitize_path_component, SafePathVar, urlify_path};
+use crate::util::{sanitize_path_component, urlify_path, SafePathVar};
 use crate::{error, loud, louder, loudest};
 use git2::{DiffOptions, Error, Repository};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::AtomicUsize;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
 fn first_line(msg: &[u8]) -> String {
@@ -63,8 +63,10 @@ impl GitRepo {
         let new_history: Vec<GitObject> = self.history.iter().cloned().take(max_entries).collect();
         for entry in &new_history {
             if self.commits.contains_key(&entry.full_hash) {
-                new_commits.insert(entry.full_hash.clone(),
-                                   self.commits.get(&entry.full_hash).unwrap().clone());
+                new_commits.insert(
+                    entry.full_hash.clone(),
+                    self.commits.get(&entry.full_hash).unwrap().clone(),
+                );
             }
         }
         let all_files: Vec<GitFile> = self.all_files.iter().cloned().take(max_entries).collect();
@@ -99,8 +101,11 @@ impl SafePathVar for GitRepo {
             let cmp = cmp.as_os_str().to_string_lossy().replace("%REPO%", &safe_name);
             dst.push(cmp);
         }
-        assert!(src.components().count() == dst.components().count(),
-                "ERROR: path substitution accidentally created a new folder in: {}", src.display());
+        assert!(
+            src.components().count() == dst.components().count(),
+            "ERROR: path substitution accidentally created a new folder in: {}",
+            src.display()
+        );
         dst
     }
 }
@@ -144,17 +149,24 @@ impl SafePathVar for GitObject {
         let src: &Path = path.as_ref();
         let mut dst = PathBuf::new();
         let safe_full_hash = sanitize_path_component(&self.full_hash);
-        let safe_ref = self.ref_name.as_deref()
+        let safe_ref = self
+            .ref_name
+            .as_deref()
             .map(|v| sanitize_path_component(&urlify_path(v)))
             .unwrap_or("%REF%".to_string());
         for cmp in src.components() {
-            let cmp = cmp.as_os_str().to_string_lossy()
+            let cmp = cmp
+                .as_os_str()
+                .to_string_lossy()
                 .replace("%ID%", &safe_full_hash)
                 .replace("%REF%", &safe_ref);
             dst.push(cmp);
         }
-        assert!(src.components().count() == dst.components().count(),
-                "ERROR: path substitution accidentally created a new folder in: {}", src.display());
+        assert!(
+            src.components().count() == dst.components().count(),
+            "ERROR: path substitution accidentally created a new folder in: {}",
+            src.display()
+        );
         dst
     }
 }
@@ -189,14 +201,19 @@ impl SafePathVar for GitFile {
         let safe_name = sanitize_path_component(&self.name);
         let safe_path = sanitize_path_component(&urlify_path(&self.path));
         for cmp in src.components() {
-            let cmp = cmp.as_os_str().to_string_lossy()
+            let cmp = cmp
+                .as_os_str()
+                .to_string_lossy()
                 .replace("%ID%", &safe_id)
                 .replace("%NAME%", &safe_name)
                 .replace("%PATH%", &safe_path);
             dst.push(cmp);
         }
-        assert!(src.components().count() == dst.components().count(),
-                "ERROR: path substitution accidentally created a new folder in: {}", src.display());
+        assert!(
+            src.components().count() == dst.components().count(),
+            "ERROR: path substitution accidentally created a new folder in: {}",
+            src.display()
+        );
         dst
     }
 }
@@ -295,21 +312,38 @@ fn walk_file_tree(
 
 pub fn dir_listing(repo: &Repository, file: &GitFile) -> Result<Vec<GitFile>, Error> {
     let mut files: Vec<GitFile> = vec![];
-    walk_file_tree(&repo, &file.id, &mut files, 0, usize::MAX, false, &(file.path.clone() + "/"))?;
+    walk_file_tree(
+        &repo,
+        &file.id,
+        &mut files,
+        0,
+        usize::MAX,
+        false,
+        &(file.path.clone() + "/"),
+    )?;
     Ok(files)
 }
 
-pub fn parse_revwalk(repo: &Repository, mut revwalk: git2::Revwalk, references: &BTreeMap<String, Vec<String>>, settings: &GitsySettingsRepo) -> Result<Vec<GitObject>, Error> {
+pub fn parse_revwalk(
+    repo: &Repository,
+    mut revwalk: git2::Revwalk,
+    references: &BTreeMap<String, Vec<String>>,
+    settings: &GitsySettingsRepo,
+) -> Result<Vec<GitObject>, Error> {
     let mut history: Vec<GitObject> = vec![];
 
     for (idx, oid) in revwalk.by_ref().enumerate() {
         let oid = oid?;
-        if  idx >= settings.limit_history.unwrap_or(usize::MAX) {
+        if idx >= settings.limit_history.unwrap_or(usize::MAX) {
             break;
         }
         let parsed = parse_commit(idx, settings, repo, &oid.to_string(), &references)?;
-        loudest!("   + [{}] {} {}", idx, parsed.full_hash,
-                 parsed.summary.as_deref().unwrap_or_default());
+        loudest!(
+            "   + [{}] {} {}",
+            idx,
+            parsed.full_hash,
+            parsed.summary.as_deref().unwrap_or_default()
+        );
         history.push(parsed);
     }
     Ok(history)
@@ -372,8 +406,7 @@ pub fn parse_repo(
     // Let's arbitrarily say it's not worth parallelizing unless we
     // can give all cores at least 1k commits to parse.  This could
     // certainly use some configurability...
-    let thread_jobs = match rayon::current_num_threads() > 1 &&
-        commit_count > 1000 * rayon::current_num_threads() {
+    let thread_jobs = match rayon::current_num_threads() > 1 && commit_count > 1000 * rayon::current_num_threads() {
         // Divide a chunk up into even smaller units, so each core
         // runs about 10.  This makes it more efficient to detect when
         // the commit limit is reached and short-circuit.
@@ -388,58 +421,66 @@ pub fn parse_repo(
     // might not be evenly distributed.
     let chunk_size = ((commit_count as f64) / (thread_jobs as f64)).ceil() as usize;
     if thread_jobs > 1 {
-        loud!(" - splitting {} commits across {} threads of approximate size {}", commit_count, thread_jobs, chunk_size);
+        loud!(
+            " - splitting {} commits across {} threads of approximate size {}",
+            commit_count,
+            thread_jobs,
+            chunk_size
+        );
     }
 
     let repo_path = repo.path();
 
     let thread_jobs: Vec<usize> = (0..thread_jobs).rev().collect(); // note the subtle rev() to do this in the right order
     let atomic_commits = AtomicUsize::new(0);
-    let mut history: Vec<_> = thread_jobs.par_iter().try_fold(|| Vec::<_>::new(), |mut acc, thread| {
-        if atomic_commits.load(Ordering::SeqCst) > settings.limit_history.unwrap_or(usize::MAX) {
-            // TODO: should convert all error paths in this function
-            // to GitsyErrors, and differentiate between real failures
-            // and soft limits.  For now, they're all stop processing,
-            // but don't raise any errors.  Here, we take advantage of
-            // that.
-            return Err(git2::Error::from_str("history limit reached"));
-        }
-        let repo = Repository::open(repo_path)?;
-        let mut revwalk = repo.revwalk()?;
-        // TODO: TOPOLOGICAL might be better, but it's also ungodly slow
-        // on large repos.  Maybe this should be configurable.
-        //
-        //revwalk.set_sorting(git2::Sort::TOPOLOGICAL)?;
-        revwalk.set_sorting(git2::Sort::NONE)?;
-        let start_commit = match (chunk_size * thread) + 1 > commit_count {
-            true => 1,
-            false => commit_count - 1 - (chunk_size * thread),
-        };
-        let end_commit = match chunk_size > start_commit {
-            true => "".into(),
-            false => format!("~{}", start_commit - chunk_size),
-        };
-        let range = format!("{}~{}..{}{}",
-                            branch_name, start_commit,
-                            branch_name, end_commit);
-        loud!(" - Parse range: {} on thread {}", range, thread);
-        match *thread == 0 {
-            true => {
-                // The last chunk gets a single ref instead of a
-                // range, because ranges can't seem to represent the
-                // very first commit in a repository...
-                let end_commit = format!("{}{}", branch_name, end_commit);
-                let branch_obj = repo.revparse_single(&end_commit).unwrap();
-                revwalk.push(branch_obj.id())?
+    let mut history: Vec<_> = thread_jobs
+        .par_iter()
+        .try_fold(
+            || Vec::<_>::new(),
+            |mut acc, thread| {
+                if atomic_commits.load(Ordering::SeqCst) > settings.limit_history.unwrap_or(usize::MAX) {
+                    // TODO: should convert all error paths in this function
+                    // to GitsyErrors, and differentiate between real failures
+                    // and soft limits.  For now, they're all stop processing,
+                    // but don't raise any errors.  Here, we take advantage of
+                    // that.
+                    return Err(git2::Error::from_str("history limit reached"));
+                }
+                let repo = Repository::open(repo_path)?;
+                let mut revwalk = repo.revwalk()?;
+                // TODO: TOPOLOGICAL might be better, but it's also ungodly slow
+                // on large repos.  Maybe this should be configurable.
+                //
+                //revwalk.set_sorting(git2::Sort::TOPOLOGICAL)?;
+                revwalk.set_sorting(git2::Sort::NONE)?;
+                let start_commit = match (chunk_size * thread) + 1 > commit_count {
+                    true => 1,
+                    false => commit_count - 1 - (chunk_size * thread),
+                };
+                let end_commit = match chunk_size > start_commit {
+                    true => "".into(),
+                    false => format!("~{}", start_commit - chunk_size),
+                };
+                let range = format!("{}~{}..{}{}", branch_name, start_commit, branch_name, end_commit);
+                loud!(" - Parse range: {} on thread {}", range, thread);
+                match *thread == 0 {
+                    true => {
+                        // The last chunk gets a single ref instead of a
+                        // range, because ranges can't seem to represent the
+                        // very first commit in a repository...
+                        let end_commit = format!("{}{}", branch_name, end_commit);
+                        let branch_obj = repo.revparse_single(&end_commit).unwrap();
+                        revwalk.push(branch_obj.id())?
+                    }
+                    false => revwalk.push_range(&range)?,
+                }
+                let res = parse_revwalk(&repo, revwalk, &references, &settings)?;
+                louder!(" - Parsed {} on thread {}", res.len(), thread);
+                atomic_commits.fetch_add(res.len(), Ordering::SeqCst);
+                acc.extend(res);
+                Ok(acc)
             },
-            false => revwalk.push_range(&range)?,
-        }
-        let res = parse_revwalk(&repo, revwalk, &references, &settings)?;
-        louder!(" - Parsed {} on thread {}", res.len(), thread);
-        atomic_commits.fetch_add(res.len(), Ordering::SeqCst);
-        acc.extend(res);
-        Ok(acc)
-    })
+        )
         .map(|x: Result<Vec<GitObject>, Error>| x.ok())
         .while_some()
         .flatten_iter() // concatenate all of the vecs in series
@@ -581,9 +622,13 @@ pub fn parse_repo(
     })
 }
 
-pub fn parse_commit(idx: usize, settings: &GitsySettingsRepo,
-                    repo: &Repository, refr: &str,
-                    references: &BTreeMap<String, Vec<String>>) -> Result<GitObject, Error> {
+pub fn parse_commit(
+    idx: usize,
+    settings: &GitsySettingsRepo,
+    repo: &Repository,
+    refr: &str,
+    references: &BTreeMap<String, Vec<String>>,
+) -> Result<GitObject, Error> {
     let obj = repo.revparse_single(refr)?;
     let commit = repo.find_commit(obj.id())?;
 
@@ -610,9 +655,7 @@ pub fn parse_commit(idx: usize, settings: &GitsySettingsRepo,
     };
 
     let (stats, commit_diff) = match idx < settings.limit_diffs.unwrap_or(usize::MAX) {
-        false => {
-            (None, None)
-        },
+        false => (None, None),
         true => {
             let b = commit.tree()?;
             let mut diffopts = DiffOptions::new();
@@ -620,17 +663,13 @@ pub fn parse_commit(idx: usize, settings: &GitsySettingsRepo,
             let diff = repo.diff_tree_to_tree(a.as_ref(), Some(&b), Some(&mut diffopts))?;
             let stats = diff.stats()?;
             let commit_diff: Option<GitDiffCommit> = match idx < settings.limit_diffs.unwrap_or(usize::MAX) {
-                true => {
-                    Some(GitDiffCommit {
-                        file_count: stats.files_changed(),
-                        additions: stats.insertions(),
-                        deletions: stats.deletions(),
-                        ..Default::default()
-                    })
-                },
-                false => {
-                    None
-                }
+                true => Some(GitDiffCommit {
+                    file_count: stats.files_changed(),
+                    additions: stats.insertions(),
+                    deletions: stats.deletions(),
+                    ..Default::default()
+                }),
+                false => None,
             };
             let stats = GitStats {
                 files: stats.files_changed(),
@@ -681,7 +720,8 @@ pub fn parse_commit(idx: usize, settings: &GitsySettingsRepo,
                         None, // TODO: handle binary files?
                         Some(&mut |_file, hunk| {
                             let mut files = files.borrow_mut();
-                            let file_diff: &mut GitDiffFile = files.last_mut().expect("Diff hunk not associated with a file!");
+                            let file_diff: &mut GitDiffFile =
+                                files.last_mut().expect("Diff hunk not associated with a file!");
                             let mut hunk_diff: GitDiffHunk = Default::default();
                             hunk_diff.context = String::from_utf8_lossy(hunk.header()).to_string();
                             file_diff.hunks.push(hunk_diff);
@@ -689,7 +729,8 @@ pub fn parse_commit(idx: usize, settings: &GitsySettingsRepo,
                         }),
                         Some(&mut |_file, _hunk, line| {
                             let mut files = files.borrow_mut();
-                            let file_diff: &mut GitDiffFile = files.last_mut().expect("Diff hunk not associated with a file!");
+                            let file_diff: &mut GitDiffFile =
+                                files.last_mut().expect("Diff hunk not associated with a file!");
                             let hunk_diff: &mut GitDiffHunk = file_diff
                                 .hunks
                                 .last_mut()
@@ -727,7 +768,7 @@ pub fn parse_commit(idx: usize, settings: &GitsySettingsRepo,
                 }
             };
             (Some(stats), commit_diff)
-        },
+        }
     };
 
     let tree = obj.peel_to_tree()?;

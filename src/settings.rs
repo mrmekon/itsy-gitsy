@@ -20,14 +20,14 @@
  * You should have received a copy of the GNU General Public License
  * along with Itsy-Gitsy.  If not, see <http://www.gnu.org/licenses/>.
  */
-use crate::{louder, error};
 use crate::git::GitRepo;
 use crate::util::SafePathVar;
+use crate::{error, louder};
 use clap::Parser;
 use git2::Repository;
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fs::{create_dir, create_dir_all, read_dir, remove_dir_all, read_to_string};
+use std::fs::{create_dir, create_dir_all, read_dir, read_to_string, remove_dir_all};
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -140,11 +140,17 @@ pub enum GitsyTemplateType {
     error,
 }
 
-pub fn substitute_path_vars<P,S>(path: &P, repo: Option<&GitRepo>, obj: Option<&S>) -> PathBuf
-where P: AsRef<Path>,
-      S: SafePathVar {
+pub fn substitute_path_vars<P, S>(path: &P, repo: Option<&GitRepo>, obj: Option<&S>) -> PathBuf
+where
+    P: AsRef<Path>,
+    S: SafePathVar,
+{
     let p: PathBuf = path.as_ref().to_path_buf();
-    assert!(p.is_relative(), "ERROR: path must be relative, not absolute: {}", p.display());
+    assert!(
+        p.is_relative(),
+        "ERROR: path must be relative, not absolute: {}",
+        p.display()
+    );
     let p: PathBuf = repo.map(|r| r.safe_substitute(&p)).unwrap_or(p);
     let p: PathBuf = obj.map(|o| o.safe_substitute(&p)).unwrap_or(p);
     p
@@ -164,42 +170,45 @@ macro_rules! template_fn {
             let new_path = substitute_path_vars(&tmpl_path, repo, obj);
             self.canonicalize_and_create(&new_path, $is_dir)
         }
-    }
+    };
 }
 
 macro_rules! templates_fn {
     ($var:ident, $is_dir:expr) => {
         pub fn $var<S: SafePathVar>(&self, repo: Option<&GitRepo>, obj: Option<&S>) -> Vec<(PathBuf, PathBuf)> {
             match &self.templates {
-                Some(template) => {
-                    template.iter()
-                        .filter(|x| x.kind == GitsyTemplateType::$var)
-                        .map(|x| {
-                            let tmpl_path = PathBuf::from(&x.output);
-                            let new_path = substitute_path_vars(&tmpl_path, repo, obj);
-                            (PathBuf::from(&x.template),
-                             self.canonicalize_and_create(&new_path, $is_dir))
-                        }).collect()
-                },
+                Some(template) => template
+                    .iter()
+                    .filter(|x| x.kind == GitsyTemplateType::$var)
+                    .map(|x| {
+                        let tmpl_path = PathBuf::from(&x.output);
+                        let new_path = substitute_path_vars(&tmpl_path, repo, obj);
+                        (
+                            PathBuf::from(&x.template),
+                            self.canonicalize_and_create(&new_path, $is_dir),
+                        )
+                    })
+                    .collect(),
                 None => {
-                    vec!()
-                },
+                    vec![]
+                }
             }
         }
-    }
+    };
 }
 
 impl SafePathVar for GitsySettingsOutputs {
     fn safe_substitute(&self, path: &impl AsRef<Path>) -> PathBuf {
         let src: &Path = path.as_ref();
         let mut dst = PathBuf::new();
-        let root = self.template_root.to_str()
-            .expect(&format!("ERROR: couldn't parse template root: {}", self.template_root.display()));
+        let root = self.template_root.to_str().expect(&format!(
+            "ERROR: couldn't parse template root: {}",
+            self.template_root.display()
+        ));
         for cmp in src.components() {
             // NOTE: this variable is not sanitized, since it's
             // allowed to create new directory structure.
-            let cmp = cmp.as_os_str().to_string_lossy()
-                .replace("%TEMPLATE%", &root);
+            let cmp = cmp.as_os_str().to_string_lossy().replace("%TEMPLATE%", &root);
             dst.push(cmp);
         }
         dst
@@ -545,9 +554,11 @@ impl GitsySettings {
         if cli.repos.len() > 0 {
             repo_descriptions.clear();
             for dir in &cli.repos {
-                let name: String = dir.file_name()
+                let name: String = dir
+                    .file_name()
                     .expect(&format!("Invalid repository path: {}", dir.display()))
-                    .to_string_lossy().to_string();
+                    .to_string_lossy()
+                    .to_string();
                 let clone_url = match settings.clone_url.as_ref() {
                     Some(url) => Some(url.replace("%REPO%", &name)),
                     _ => None,

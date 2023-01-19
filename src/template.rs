@@ -102,16 +102,13 @@ impl Filter for MaskFilter {
                 .expect("ERROR: Tera mask filter called without `mask` parameter.")
                 .clone(),
         )
-            .expect("ERROR: Tera `mask` parameter is not valid.");
+        .expect("ERROR: Tera `mask` parameter is not valid.");
         let mask: u64 = match mask.starts_with("0x") {
             true => {
                 let hexstr = mask.strip_prefix("0x").unwrap();
-                u64::from_str_radix(hexstr, 16)
-                    .expect("ERROR: Tera `mask` parameter is invalid hex.")
-            },
-            false => {
-                str::parse::<u64>(&mask).expect("ERROR: Tera `mask` parameter is not valid.")
-            },
+                u64::from_str_radix(hexstr, 16).expect("ERROR: Tera `mask` parameter is invalid hex.")
+            }
+            false => str::parse::<u64>(&mask).expect("ERROR: Tera `mask` parameter is not valid."),
         };
         Ok(to_value(v & mask).unwrap())
     }
@@ -191,9 +188,10 @@ pub struct Pagination {
 }
 impl Pagination {
     pub fn new<P: AsRef<Path>>(cur: usize, total: usize, url_template: &P) -> Self {
-        let url_template = url_template.as_ref().to_str()
-            .expect(&format!("ERROR: attempted to paginate unparseable path: {}",
-                             url_template.as_ref().display()));
+        let url_template = url_template.as_ref().to_str().expect(&format!(
+            "ERROR: attempted to paginate unparseable path: {}",
+            url_template.as_ref().display()
+        ));
         let digits = total.to_string().len().max(2);
         let next = match cur + 1 <= total {
             true => Some(cur + 1),
