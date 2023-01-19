@@ -329,6 +329,7 @@ pub fn parse_revwalk(
     mut revwalk: git2::Revwalk,
     references: &BTreeMap<String, Vec<String>>,
     settings: &GitsySettingsRepo,
+    max_diffs: usize,
 ) -> Result<Vec<GitObject>, Error> {
     let mut history: Vec<GitObject> = vec![];
 
@@ -337,7 +338,8 @@ pub fn parse_revwalk(
         if idx >= settings.limit_history.unwrap_or(usize::MAX) {
             break;
         }
-        let parsed = parse_commit(idx, settings, repo, &oid.to_string(), &references)?;
+        let parsed = parse_commit(idx, settings, repo, &oid.to_string(), &references,
+                                  history.len() < max_diffs)?;
         loudest!(
             "   + [{}] {} {}",
             idx,
@@ -431,13 +433,36 @@ pub fn parse_repo(
 
     let repo_path = repo.path();
 
-    let thread_jobs: Vec<usize> = (0..thread_jobs).rev().collect(); // note the subtle rev() to do this in the right order
+    // Make a list of thread IDs to execute.  Note the subtle rev() to
+    // do this in the right order.
+    let thread_jobs: Vec<usize> = (0..thread_jobs).rev().collect();
+    // Make a matching list of the maximum number of diffs to
+    // calculate on each thread.  It's unknown how many commits each
+    // thread will find, but each should find at least `chunk_size`.
+    let diffs: Vec<usize> = thread_jobs
+        .iter()
+        .scan(settings.limit_diffs.unwrap_or(usize::MAX), |acc, _x| {
+            match (*acc > 0, chunk_size > *acc) {
+                (true, true) => {
+                    let old_acc = *acc;
+                    *acc = 0;
+                    Some(old_acc)
+                }
+                (true, false) => {
+                    *acc -= chunk_size;
+                    Some(chunk_size)
+                }
+                _ => Some(0),
+            }
+        })
+        .collect();
+    let zipped_thread_jobs: Vec<(usize, usize)> = thread_jobs.iter().cloned().zip(diffs).collect();
     let atomic_commits = AtomicUsize::new(0);
-    let mut history: Vec<_> = thread_jobs
+    let mut history: Vec<_> = zipped_thread_jobs
         .par_iter()
         .try_fold(
             || Vec::<_>::new(),
-            |mut acc, thread| {
+            |mut acc, (thread, max_diffs)| {
                 if atomic_commits.load(Ordering::SeqCst) > settings.limit_history.unwrap_or(usize::MAX) {
                     // TODO: should convert all error paths in this function
                     // to GitsyErrors, and differentiate between real failures
@@ -474,7 +499,7 @@ pub fn parse_repo(
                     }
                     false => revwalk.push_range(&range)?,
                 }
-                let res = parse_revwalk(&repo, revwalk, &references, &settings)?;
+                let res = parse_revwalk(&repo, revwalk, &references, &settings, *max_diffs)?;
                 louder!(" - Parsed {} on thread {}", res.len(), thread);
                 atomic_commits.fetch_add(res.len(), Ordering::SeqCst);
                 acc.extend(res);
@@ -623,11 +648,12 @@ pub fn parse_repo(
 }
 
 pub fn parse_commit(
-    idx: usize,
-    settings: &GitsySettingsRepo,
+    _idx: usize,
+    _settings: &GitsySettingsRepo,
     repo: &Repository,
     refr: &str,
     references: &BTreeMap<String, Vec<String>>,
+    with_diff: bool,
 ) -> Result<GitObject, Error> {
     let obj = repo.revparse_single(refr)?;
     let commit = repo.find_commit(obj.id())?;
@@ -654,7 +680,7 @@ pub fn parse_commit(
         _ => None,
     };
 
-    let (stats, commit_diff) = match idx < settings.limit_diffs.unwrap_or(usize::MAX) {
+    let (stats, commit_diff) = match with_diff {
         false => (None, None),
         true => {
             let b = commit.tree()?;
@@ -662,7 +688,7 @@ pub fn parse_commit(
             diffopts.enable_fast_untracked_dirs(true);
             let diff = repo.diff_tree_to_tree(a.as_ref(), Some(&b), Some(&mut diffopts))?;
             let stats = diff.stats()?;
-            let commit_diff: Option<GitDiffCommit> = match idx < settings.limit_diffs.unwrap_or(usize::MAX) {
+            let commit_diff: Option<GitDiffCommit> = match with_diff {
                 true => Some(GitDiffCommit {
                     file_count: stats.files_changed(),
                     additions: stats.insertions(),
