@@ -372,6 +372,7 @@ pub struct GitsySettingsRepo {
     pub limit_commits: Option<usize>,
     pub limit_branches: Option<usize>,
     pub limit_tags: Option<usize>,
+    pub limit_commit_ids_to_related: Option<bool>,
     pub limit_tree_depth: Option<usize>,
     pub limit_file_size: Option<usize>,
     pub limit_repo_size: Option<usize>,
@@ -413,6 +414,7 @@ pub struct GitsySettings {
     pub limit_commits: Option<usize>,
     pub limit_branches: Option<usize>,
     pub limit_tags: Option<usize>,
+    pub limit_commit_ids_to_related: Option<bool>,
     pub limit_tree_depth: Option<usize>,
     pub limit_file_size: Option<usize>,
     pub limit_repo_size: Option<usize>,
@@ -496,6 +498,7 @@ impl GitsySettings {
                     global_to_repo!(settings, repo, limit_commits);
                     global_to_repo!(settings, repo, limit_branches);
                     global_to_repo!(settings, repo, limit_tags);
+                    global_to_repo!(settings, repo, limit_commit_ids_to_related);
                     global_to_repo!(settings, repo, limit_tree_depth);
                     global_to_repo!(settings, repo, limit_file_size);
                     global_to_repo!(settings, repo, limit_repo_size);
@@ -537,6 +540,7 @@ impl GitsySettings {
                             limit_commits: settings.limit_commits.clone(),
                             limit_branches: settings.limit_branches.clone(),
                             limit_tags: settings.limit_tags.clone(),
+                            limit_commit_ids_to_related: settings.limit_commit_ids_to_related.clone(),
                             limit_tree_depth: settings.limit_tree_depth.clone(),
                             limit_file_size: settings.limit_file_size.clone(),
                             limit_repo_size: settings.limit_repo_size.clone(),
@@ -579,6 +583,7 @@ impl GitsySettings {
                     limit_commits: settings.limit_commits.clone(),
                     limit_branches: settings.limit_branches.clone(),
                     limit_tags: settings.limit_tags.clone(),
+                    limit_commit_ids_to_related: settings.limit_commit_ids_to_related.clone(),
                     limit_tree_depth: settings.limit_tree_depth.clone(),
                     limit_file_size: settings.limit_file_size.clone(),
                     limit_repo_size: settings.limit_repo_size.clone(),

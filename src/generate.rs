@@ -454,6 +454,10 @@ impl GitsyGenerator {
                         })
                         .map_while(|x| x)
                         .collect();
+                    if repo_desc.limit_commit_ids_to_related == Some(true) {
+                        let parent_ids: Vec<String> = commits.keys().cloned().collect();
+                        paged_ctx.insert("commit_ids", &parent_ids);
+                    }
                     paged_ctx.insert("page", &pagination.with_relative_paths());
                     paged_ctx.insert("history", &page);
                     paged_ctx.insert("commits", &commits);
@@ -493,6 +497,15 @@ impl GitsyGenerator {
         for (_id, commit) in &parsed_repo.commits {
             ctx.try_insert("commit", &commit)
                 .expect("Failed to add commit to template engine.");
+            if repo_desc.limit_commit_ids_to_related == Some(true) {
+                let parent_ids: Vec<String> = commit
+                    .parents
+                    .iter()
+                    .filter(|x| parsed_repo.commits.contains_key(*x))
+                    .cloned()
+                    .collect();
+                ctx.insert("commit_ids", &parent_ids);
+            }
             for (templ_path, out_path) in self.settings.outputs.commit(Some(parsed_repo), Some(commit)) {
                 let templ_path = templ_path.to_str().expect(&format!(
                     "ERROR: a summary template path is invalid: {}",
@@ -593,6 +606,14 @@ impl GitsyGenerator {
         let mut repo_bytes = 0;
         for branch in &parsed_repo.branches {
             ctx.insert("branch", branch);
+            if repo_desc.limit_commit_ids_to_related == Some(true) {
+                let parent_ids: Vec<String> = [&branch.full_hash]
+                    .iter()
+                    .filter(|x| parsed_repo.commits.contains_key(**x))
+                    .map(|x| (**x).clone())
+                    .collect();
+                ctx.insert("commit_ids", &parent_ids);
+            }
             for (templ_path, out_path) in self.settings.outputs.branch(Some(parsed_repo), Some(branch)) {
                 let templ_path = templ_path.to_str().expect(&format!(
                     "ERROR: a summary template path is invalid: {}",
@@ -693,6 +714,15 @@ impl GitsyGenerator {
         let mut repo_bytes = 0;
         for tag in &parsed_repo.tags {
             ctx.insert("tag", tag);
+            if repo_desc.limit_commit_ids_to_related == Some(true) {
+                let parent_ids: Vec<String> = [tag.tagged_id.as_deref()]
+                    .iter()
+                    .map_while(|x| *x)
+                    .filter(|x| parsed_repo.commits.contains_key(*x))
+                    .map(|x| x.to_string())
+                    .collect();
+                ctx.insert("commit_ids", &parent_ids);
+            }
             if let Some(tagged_id) = tag.tagged_id.as_ref() {
                 if let Some(commit) = parsed_repo.commits.get(tagged_id) {
                     ctx.insert("commit", &commit);

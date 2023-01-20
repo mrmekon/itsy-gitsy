@@ -209,6 +209,27 @@ threads = 0
 # This can also be set per-repository.
 #limit_tags       = 500
 
+# Limit the `commit_ids` variable to only related commits
+#
+# Normally the `commit_ids` variable contains a list of *all* git
+# commit hashes that Itsy-Gitsy is parsing.  For large repos, this can
+# be enormous, and take a lot of CPU time to search.
+#
+# Enabling this option limits `commit_ids` to only contain hashes of
+# commits that are referenced by the current object:
+#
+# - in `history` templates, all commits on the current page
+# - in `commit` templates, all the parent commits
+# - in `branch` templates, the commit it references
+# - in `tag` templates, the commit that it tags
+#
+# Enabling this provides a performance boost with the default
+# templates with no tradeoffs.  This is only a restriction for custom
+# templates that require more metadata.
+#
+# This can also be set per-repository.
+limit_commit_ids_to_related = true
+
 # Limits directory depth to traverse when parsing files.
 #
 # Limits the number of directories traversed when enumerating files in the

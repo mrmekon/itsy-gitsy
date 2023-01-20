@@ -183,7 +183,7 @@ Syntax highlighting uses syntect's pure-Rust implementation by default, to avoid
 
 All metadata of all repositories, except for file contents, is held in memory.  Large repositories can easily exhaust memory, and disk usage can also get quite high.  There are several `limit_*` settings available in the configuration for restricting the amount of data held in memory, with the tradeoff of reducing the amount of data available for the generated output.  `limit_context` and `limit_diffs` are particularly important restrictions to set on repositories with thousands of commits.
 
-Small repositories with dozens to hundreds of commits can be generated on the order of a few seconds or less.  Large repositories take *considerably* longer; parsing 1,115,000 commits from the Linux kernel repository with `limit_tree_depth = 3`, `limit_context = 100` and `limit_diffs = 0` took ~25 minutes on a fast laptop, and produced a ~5.6GB website.  Peak memory usage was 8GB.
+Small repositories with dozens to hundreds of commits can be generated on the order of a few seconds or less.  Large repositories take *considerably* longer and significant amounts of RAM, but aggressively applying limits in the configuration can help; parsing 1,115,000 commits from the Linux kernel repository with syntax highlighting disabled, `limit_commit_ids_to_related = true`, `limit_tree_depth = 3`, `limit_context = 100` and `limit_diffs = 0` took ~7 minutes on a fast laptop, and produced a ~5.7GB website.  Peak memory usage was ~8GB.
 
 ## Other Considerations
 
