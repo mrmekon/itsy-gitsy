@@ -153,16 +153,16 @@ Any templates that are not specified in the configuration file are not evaluated
 
 Tera templates support custom functions and filters, and Itsy-Gitsy defines a few for convenience:
 
-| Name                | Type     | Purpose                                    | Example                                          |              |
-|---------------------|----------|--------------------------------------------|--------------------------------------------------|--------------|
-| only_files          | filter   | Filter the file tree into only files       | {{ all_files \| only_files }}                    |              |
-| only_dirs           | filter   | Filter the file tree into only directories | {{ all_files \| only_dirs }}                     |              |
-| hex                 | filter   | Output a number as a hex string            | {{ 17 \| hex }}                                  |              |
-| oct                 | filter   | Output a number as an octal string         | {{ 17 \| oct }}                                  |              |
-| mask                | filter   | Bitwise mask a number with another number  | {{ 17 \| mask(mask="0x77") }}                    |              |
-| url_string          | filter   | Convert a string to a url-friendly "slug"  | {{ file.path                                     | url_string}} |
-| ts_to_date          | function | Convert a timestamp and offset to a date   | {{ts_to_date(ts=ts_utc, tz=ts_offset)}}          |              |
-| ts_to_git_timestamp | function | Same, but print in standard Git format     | {{ts_to_git_timestamp(ts=ts_utc, tz=ts_offset)}} |              |
+| Name                | Type     | Purpose                                    | Example                                          |
+|---------------------|----------|--------------------------------------------|--------------------------------------------------|
+| only_files          | filter   | Filter the file tree into only files       | {{ all_files \| only_files }}                    |
+| only_dirs           | filter   | Filter the file tree into only directories | {{ all_files \| only_dirs }}                     |
+| hex                 | filter   | Output a number as a hex string            | {{ 17 \| hex }}                                  |
+| oct                 | filter   | Output a number as an octal string         | {{ 17 \| oct }}                                  |
+| mask                | filter   | Bitwise mask a number with another number  | {{ 17 \| mask(mask="0x77") }}                    |
+| url_string          | filter   | Convert a string to a url-friendly "slug"  | {{ file.path \| url_string}}                     |
+| ts_to_date          | function | Convert a timestamp and offset to a date   | {{ts_to_date(ts=ts_utc, tz=ts_offset)}}          |
+| ts_to_git_timestamp | function | Same, but print in standard Git format     | {{ts_to_git_timestamp(ts=ts_utc, tz=ts_offset)}} |
 
 `url_string` can be used in conjunction with the `%PATH%` and `%REF%` filename variables.  Both use a very primitive form of "slugifying" the strings into a format that can be used in a URL.  This allows for basic permalinks.
 
