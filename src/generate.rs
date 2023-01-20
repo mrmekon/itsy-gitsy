@@ -841,8 +841,6 @@ impl GitsyGenerator {
             atomic_bytes.fetch_add(bytes, Ordering::SeqCst);
         }
 
-        // TODO: parallelize the rest of the processing steps.  This one is
-        // done first because syntax highlighting is very slow.
         let files: Vec<&GitFile> = parsed_repo.all_files.iter().filter(|x| x.kind == "file").collect();
         let atomic_repo_bytes: AtomicUsize = AtomicUsize::new(repo_bytes);
         let repo_path = repo
