@@ -168,9 +168,9 @@ Tera templates support custom functions and filters, and Itsy-Gitsy defines a fe
 
 ## Security
 
-Security is, for the most part, outsourced to the libraries Itsy-Gitsy depends on.  [git2](https://github.com/rust-lang/git2-rs) handles the security of Git repo access, [Tera](https://tera.netlify.app/) and the templates files themselves handle sanitizing HTML outputs, [pulldown-cmark](https://github.com/raphlinus/pulldown-cmark) handles sanitizing Markdown output, and [syntect](https://github.com/trishume/syntect) handles sanitizing syntax highlighted file contents.  If any of these libraries contain security issues, then so does Itsy Gitsy.
+Security is, for the most part, outsourced to the libraries Itsy-Gitsy depends on.  [git2](https://github.com/rust-lang/git2-rs) handles the security of Git repo access, [Tera](https://tera.netlify.app/) and the templates files themselves handle sanitizing HTML outputs, [pulldown-cmark](https://github.com/raphlinus/pulldown-cmark) handles sanitizing Markdown output, and [syntect](https://github.com/trishume/syntect) handles sanitizing syntax highlighted file contents.  If any of these libraries contain security issues, then so does Itsy-Gitsy.
 
-The main thing Itsy-Gitsy itself is responsible for is ensuring it only writes files to its output directory.  It has some basic protections against obvious attempts to write outside of the output subdirectory, but nothing invinsible.
+The main thing Itsy-Gitsy itself is responsible for is ensuring it only writes files to its output directory.  It has some basic protections against obvious attempts to write outside of the output subdirectory, but nothing invincible.
 
 As always, if security is a concern, best practice is to follow the rules of least-privilege.  Run Itsy-Gitsy under a dedicated, low-privilege user account against Git repositories with read-only or no upstream access.  For maximum paranoia, disable syntax highlighting and Markdown rendering, and use filesystem namespaces to restrict it to read-only access of Git repositories and read-write access to the output directory.
 
