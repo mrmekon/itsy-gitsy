@@ -364,6 +364,7 @@ pub struct GitsySettingsRepo {
     pub render_markdown: Option<bool>,
     pub syntax_highlight: Option<bool>,
     pub syntax_highlight_theme: Option<String>,
+    pub fetch_remote: Option<bool>,
     pub attributes: Option<BTreeMap<String, toml::Value>>,
     pub paginate_history: Option<usize>,
     pub paginate_branches: Option<usize>,
@@ -406,6 +407,7 @@ pub struct GitsySettings {
     pub readme_files: Option<Vec<String>>,
     pub asset_files: Option<Vec<String>>,
     pub branch: Option<String>,
+    pub fetch_remote: Option<bool>,
     pub paginate_history: Option<usize>,
     pub paginate_branches: Option<usize>,
     pub paginate_tags: Option<usize>,
@@ -491,6 +493,7 @@ impl GitsySettings {
                     global_to_repo!(settings, repo, render_markdown);
                     global_to_repo!(settings, repo, syntax_highlight);
                     global_to_repo!(settings, repo, syntax_highlight_theme);
+                    global_to_repo!(settings, repo, fetch_remote);
                     global_to_repo!(settings, repo, paginate_history);
                     global_to_repo!(settings, repo, paginate_branches);
                     global_to_repo!(settings, repo, paginate_tags);
@@ -533,6 +536,7 @@ impl GitsySettings {
                             render_markdown: settings.render_markdown.clone(),
                             syntax_highlight: settings.syntax_highlight.clone(),
                             syntax_highlight_theme: settings.syntax_highlight_theme.clone(),
+                            fetch_remote: settings.fetch_remote.clone(),
                             paginate_history: settings.paginate_history.clone(),
                             paginate_branches: settings.paginate_branches.clone(),
                             paginate_tags: settings.paginate_tags.clone(),
@@ -576,6 +580,7 @@ impl GitsySettings {
                     render_markdown: settings.render_markdown.clone(),
                     syntax_highlight: settings.syntax_highlight.clone(),
                     syntax_highlight_theme: settings.syntax_highlight_theme.clone(),
+                    fetch_remote: settings.fetch_remote.clone(),
                     paginate_history: settings.paginate_history.clone(),
                     paginate_branches: settings.paginate_branches.clone(),
                     paginate_tags: settings.paginate_tags.clone(),

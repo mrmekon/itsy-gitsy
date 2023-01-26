@@ -159,6 +159,20 @@ syntax_highlight = true
 #
 syntax_highlight_theme = "base16-ocean.light"
 
+# Whether or not to run 'git fetch' on remote repos
+#
+# When specified repositories are remote (via HTTPS), this setting
+# configures whether Itsy-Gitsy should run the equivalent of `git
+# fetch --all` to update the repository first.
+#
+# Itsy-Gitsy will exit with an error if the fetch fails.  If a
+# repository is not available, or if Itsy-Gitsy is running in an
+# environment without network access, this should be set to 'false'.
+#
+# This can also be set per-repository.  Defaults to 'true' if not
+# specified.
+fetch_remote = true
+
 # Number of threads to use for parallel processing
 #
 # Specify a specify a specific number of threads/cores to split

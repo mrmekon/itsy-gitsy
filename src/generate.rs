@@ -149,21 +149,26 @@ impl GitsyGenerator {
                     .collect();
                 match Repository::open(&clone_path) {
                     Ok(r) => {
-                        // Repo already cloned, so update all refs
-                        let refs: Vec<String> = r
-                            .references()
-                            .expect(&format!("Unable to enumerate references for repo [{}]", name))
-                            .map(|x| {
-                                x.expect(&format!("Found invalid reference in repo [{}]", name))
-                                    .name()
-                                    .expect(&format!("Found unnamed reference in repo: [{}]", name))
-                                    .to_string()
-                            })
-                            .collect();
-                        r.find_remote("origin")
-                            .expect(&format!("Clone of repo [{}] missing `origin` remote.", name))
-                            .fetch(&refs, None, None)
-                            .expect(&format!("Failed to fetch updates from remote repo [{}]", name));
+                        match self.settings.fetch_remote {
+                            Some(false) => {}
+                            _ => { // explicitly true, or unspecified (default)
+                                // Repo already cloned, so update all refs
+                                let refs: Vec<String> = r
+                                    .references()
+                                    .expect(&format!("Unable to enumerate references for repo [{}]", name))
+                                    .map(|x| {
+                                        x.expect(&format!("Found invalid reference in repo [{}]", name))
+                                            .name()
+                                            .expect(&format!("Found unnamed reference in repo: [{}]", name))
+                                            .to_string()
+                                    })
+                                    .collect();
+                                r.find_remote("origin")
+                                    .expect(&format!("Clone of repo [{}] missing `origin` remote.", name))
+                                    .fetch(&refs, None, None)
+                                    .expect(&format!("Failed to fetch updates from remote repo [{}]", name));
+                            },
+                        }
                         clone_path.to_string_lossy().to_string()
                     }
                     Err(_) => {
