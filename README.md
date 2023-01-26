@@ -44,6 +44,8 @@ Feedback, bug reports, and feature requests are welcome.
 
 * Generate static, templated, multi-page output from Git repositories
 * Index any number of Git repositories
+  * local directories (bare or full)
+  * remote repositories (only unauthenticated HTTPS)
 * Configurable name, path, branch, description, website, etc.
 * Site-wide and per-repository settings
 * Multiple supported templates
@@ -58,9 +60,11 @@ Feedback, bug reports, and feature requests are welcome.
 * Configurable output
   * configurable file names, with variable substitution
   * configurable directory structure
+  * unlimited template-to-output mappings
 * Paginated output
 * Configurable limits for RAM and disk space usage
 * Site-wide and per-repository asset files
+* Basic "permalink" support
 
 ## Getting Started
 
