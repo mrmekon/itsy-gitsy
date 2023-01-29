@@ -29,14 +29,6 @@ mod util;
 use generate::GitsyGenerator;
 use settings::{GitsyCli, GitsySettings};
 
-// TODO:
-//
-//   * favicon
-//   * better error propagation
-//   * automated tests
-//   * documentation + examples
-//
-
 fn main() {
     let cli = GitsyCli::new();
     let (settings, repo_descriptions) = GitsySettings::new(&cli);
