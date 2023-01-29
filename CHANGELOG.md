@@ -1,6 +1,6 @@
 # Itsy-Gitsy Changelog / News
 
-## v0.5.0 -- unreleased
+## v0.5.0 -- 2023-01-29
 
 * MAJOR: remove 1-to-1 template mapping restriction (config format changed)
 * MAJOR: support parallel multi-thread/core execution
