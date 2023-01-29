@@ -19,7 +19,7 @@
     <th>Author</th>
     <th>Date</th>
   </tr>
-  {% for entry in branches -%}
+  {% for entry in branches | sort(attribute="ts_utc") | reverse -%}
   <tr class="branch">
     <td class="name"><a href="branch/{{entry.full_hash}}.html">{{entry.ref_name}}</a></td>
     <td class="oid">{{entry.short_hash}}</td>

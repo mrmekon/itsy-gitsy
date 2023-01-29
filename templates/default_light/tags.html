@@ -19,7 +19,7 @@
     <th>Author</th>
     <th>Date</th>
   </tr>
-  {% for entry in tags -%}
+  {% for entry in tags | sort(attribute="ts_utc") | reverse -%}
   <tr class="tag">
     <td class="name"><a href="tag/{{entry.full_hash}}.html">{{entry.ref_name}}</a></td>
     <td class="oid">{{entry.short_hash}}</td>
