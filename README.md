@@ -134,20 +134,20 @@ Templates are defined using the [Tera](https://tera.netlify.app/) template engin
 
 Itsy-Gitsy has a predetermined set of known template types, designed with a multi-page static Git browser in mind.  A default set of templates are provided, which demonstrate the generation of a full, multi-page Git repository browser.  You are very much encouraged to write your own, or modify the provided ones to suit your needs.
 
-| Template       | Intended Usage                                   | Metadata                                             |
-|----------------|--------------------------------------------------|------------------------------------------------------|
-| `repo_list`    | Display a list of all indexed repositories.      | All metadata of all indexed repositories.            |
-| `repo_summary` | Render a summary view of a single repository.    | All repo metadata (the current repo).                |
-| `history`      | Render a list of historical commits.             | All repo metadata, optionally paginated on history.  |
-| `commit`       | Render details and/or diff of a specific commit  | All repo metadata, plus a specific commit.           |
-| `branches`     | Render a list of all branches in the repository. | All repo metadata, optionally paginated on branches. |
-| `branch`       | Render details of a specific branch.             | All repo metadata, plus a specific branch.           |
-| `tags`         | Render a list of all tags in the repository.     | All repo metadata, optionally paginated on tags.     |
-| `tag`          | Render details of a specific tag.                | All repo metadata, plus a specific tag.              |
-| `files`        | Render a list of all files in the repository.    | All repo metadata.                                   |
-| `file`         | Render contents of a specific file.              | All repo metadata, plus a specific file.             |
-| `dir`          | Render contents of a specific directory.         | All repo metadata, plus a specific directory.        |
-| `error`        | Render a generic error page.                     | Only site-wide configuration.                        |
+| Template    | Intended Usage                                   | Metadata                                             |
+|-------------|--------------------------------------------------|------------------------------------------------------|
+| `repo_list` | Display a list of all indexed repositories.      | All metadata of all indexed repositories.            |
+| `summary`   | Render a summary view of a single repository.    | All repo metadata (the current repo).                |
+| `history`   | Render a list of historical commits.             | All repo metadata, optionally paginated on history.  |
+| `commit`    | Render details and/or diff of a specific commit  | All repo metadata, plus a specific commit.           |
+| `branches`  | Render a list of all branches in the repository. | All repo metadata, optionally paginated on branches. |
+| `branch`    | Render details of a specific branch.             | All repo metadata, plus a specific branch.           |
+| `tags`      | Render a list of all tags in the repository.     | All repo metadata, optionally paginated on tags.     |
+| `tag`       | Render details of a specific tag.                | All repo metadata, plus a specific tag.              |
+| `files`     | Render a list of all files in the repository.    | All repo metadata.                                   |
+| `file`      | Render contents of a specific file.              | All repo metadata, plus a specific file.             |
+| `dir`       | Render contents of a specific directory.         | All repo metadata, plus a specific directory.        |
+| `error`     | Render a generic error page.                     | Only site-wide configuration.                        |
 
 The templates absolutely do not need to be used for their "intended" purposes.  Modify their meaning to suit your needs!  You could, for instance, ignore the intended meaning of `repo_list` and instead use that template to generate an e-mail newsletter with the most recent 10 commits messages from all indexed repositories.
 
