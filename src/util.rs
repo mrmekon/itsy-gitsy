@@ -175,3 +175,116 @@ pub fn urlify_path(path: &str) -> String {
 pub trait SafePathVar {
     fn safe_substitute(&self, path: &impl AsRef<Path>) -> PathBuf;
 }
+
+// src is a regular file, dst is a directory to copy into
+pub fn copy_file<P: AsRef<Path>, Q: AsRef<Path>>(src: P, dst: Q) -> Result<(), GitsyError> {
+    let (src, dst) = (src.as_ref(), dst.as_ref());
+    if !dst.is_dir() {
+        return Err(GitsyError::kind(
+            GitsyErrorKind::Filesystem,
+            Some(&format!(
+                "Copy failed, destination is not a directory: {}",
+                dst.display()
+            )),
+        ));
+    }
+    if src.is_dir() {
+        return Err(GitsyError::kind(
+            GitsyErrorKind::Filesystem,
+            Some(&format!("Copy failed, source is not a regular file: {}", src.display())),
+        ));
+    }
+    let filename = src.file_name().ok_or(GitsyError::kind(
+        GitsyErrorKind::Filesystem,
+        Some(&format!("Can't determine filename to copy file: {}", src.display())),
+    ))?;
+    let mut target = dst.to_owned();
+    target.push(filename);
+    std::fs::copy(&src, &target).map_err(|e| GitsyError::kind(GitsyErrorKind::Filesystem, Some(&e.to_string())))?;
+    Ok(())
+}
+
+// src is a directory, dst is a directory to copy into.
+// returns an error if any files in src are directories and 'recurse' is not true.
+pub fn copy_dir<P: AsRef<Path>, Q: AsRef<Path>>(src: P, dst: Q, recurse: bool) -> Result<(), GitsyError> {
+    let (src, mut dst) = (src.as_ref(), dst.as_ref().to_owned());
+    if !src.is_dir() {
+        return Err(GitsyError::kind(
+            GitsyErrorKind::Filesystem,
+            Some(&format!("Copy failed, source is not a directory: {}", src.display())),
+        ));
+    }
+    if !dst.is_dir() {
+        return Err(GitsyError::kind(
+            GitsyErrorKind::Filesystem,
+            Some(&format!(
+                "Copy failed, destination is not a directory: {}",
+                dst.display()
+            )),
+        ));
+    }
+
+    let dir_name = src.file_name().ok_or(GitsyError::kind(
+        GitsyErrorKind::Filesystem,
+        Some(&format!("Can't determine directory to copy from: {}", src.display())),
+    ))?;
+    dst.push(dir_name);
+    std::fs::create_dir(&dst).map_err(|_e| {
+        GitsyError::kind(
+            GitsyErrorKind::Filesystem,
+            Some(&format!("Unable to create destination directory: {}", dst.display())),
+        )
+    })?;
+
+    let mut all_glob = src.to_owned();
+    all_glob.push("*");
+    for entry in glob(all_glob.to_str().ok_or(GitsyError::kind(
+        GitsyErrorKind::Filesystem,
+        Some(&format!("Unable to list files in source directory: {}", src.display())),
+    ))?)
+    .map_err(|_e| {
+        GitsyError::kind(
+            GitsyErrorKind::Filesystem,
+            Some(&format!("Unable to list files in source directory: {}", src.display())),
+        )
+    })? {
+        let entry = entry.map_err(|_e| {
+            GitsyError::kind(
+                GitsyErrorKind::Filesystem,
+                Some(&format!("Unable to list files in source directory: {}", src.display())),
+            )
+        })?;
+        match entry.is_dir() {
+            true => match recurse {
+                true => copy_dir(&entry, &dst, recurse)?,
+                false => {
+                    return Err(GitsyError::kind(
+                        GitsyErrorKind::Filesystem,
+                        Some(&format!("Cannot copy, source is a directory: {}", src.display())),
+                    ))
+                }
+            },
+            false => {
+                copy_file(&entry, &dst)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+// src is a file or directory, dst is a directory to copy into
+// returns an error if src is a directory and 'recurse' is not true.
+#[allow(dead_code)]
+pub fn copy<P: AsRef<Path>>(src: P, dst: P, recurse: bool) -> Result<(), GitsyError> {
+    let (src, dst) = (src.as_ref(), dst.as_ref());
+    match src.is_dir() {
+        true => match recurse {
+            true => copy_dir(src, dst, recurse),
+            false => Err(GitsyError::kind(
+                GitsyErrorKind::Filesystem,
+                Some(&format!("Cannot copy, source is a directory: {}", src.display())),
+            )),
+        },
+        false => copy_file(src, dst),
+    }
+}
