@@ -32,7 +32,7 @@ use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Default)]
 #[command(author = "Trevor Bentley", version, about, long_about = None)]
 #[command(help_template = "\
 {name} v{version}, by {author-with-newline}
@@ -41,7 +41,7 @@ use std::sync::atomic::Ordering;
 
 {all-args}{after-help}
 ")]
-struct CliArgs {
+pub struct CliArgs {
     /// Path to TOML configuration file
     #[arg(short, long, value_name = "FILE")]
     config: Option<PathBuf>,
@@ -62,9 +62,10 @@ struct CliArgs {
     quiet: bool,
     /// Increase verbosity of output.  Specify up to 4 times.
     #[arg(short, long, action = clap::ArgAction::Count)]
-    verbose: u8,
+    pub verbose: u8,
 }
 
+#[derive(Default)]
 pub struct GitsyCli {
     pub path: PathBuf,
     pub dir: PathBuf,
@@ -75,10 +76,8 @@ pub struct GitsyCli {
 }
 
 impl GitsyCli {
-    pub fn new() -> Self {
-        let cli = CliArgs::parse();
-        let config_path = cli.config.as_deref().unwrap_or(Path::new("config.toml")).to_owned();
-        let config_dir = config_path
+    pub fn new_with_config<P: AsRef<Path>>(config_path: P, cli: CliArgs) -> Self {
+        let config_dir = config_path.as_ref()
             .parent()
             .expect("Config file not in valid directory.")
             .to_owned();
@@ -86,21 +85,14 @@ impl GitsyCli {
             true => config_dir,
             false => PathBuf::from("."),
         };
-        let config_path = match config_path.canonicalize() {
+        let config_path = match config_path.as_ref().canonicalize() {
             Ok(d) => d,
-            _ => config_path.clone(),
+            _ => config_path.as_ref().to_owned(),
         };
         let config_dir = match config_dir.canonicalize() {
             Ok(d) => d,
             _ => config_dir.clone(),
         };
-        crate::util::VERBOSITY.store(
-            match cli.quiet {
-                true => 0,
-                false => (cli.verbose + 1).into(),
-            },
-            Ordering::Relaxed,
-        );
         GitsyCli {
             path: config_path,
             dir: config_dir,
@@ -109,6 +101,19 @@ impl GitsyCli {
             should_clean: cli.clean,
             repos: cli.repo,
         }
+    }
+
+    pub fn new() -> Self {
+        let cli = CliArgs::parse();
+        let config_path = cli.config.as_deref().unwrap_or(Path::new("config.toml")).to_owned();
+        crate::util::VERBOSITY.store(
+            match cli.quiet {
+                true => 0,
+                false => (cli.verbose + 1).into(),
+            },
+            Ordering::Relaxed,
+        );
+        GitsyCli::new_with_config(config_path.as_path(), cli)
     }
 }
 
