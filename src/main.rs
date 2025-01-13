@@ -33,5 +33,11 @@ fn main() {
     let cli = GitsyCli::new();
     let (settings, repo_descriptions) = GitsySettings::new(&cli);
     let mut generator = GitsyGenerator::new(cli, settings, repo_descriptions);
-    generator.generate().expect("Itsy-Gitsy generation failed!");
+    match generator.generate() {
+        Err(e) => {
+            error!("ERROR: {:?}", e);
+            panic!("Itsy-Gitsy generation failed!");
+        },
+        _ => {},
+    }
 }
