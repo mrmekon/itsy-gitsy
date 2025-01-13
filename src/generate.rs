@@ -343,14 +343,8 @@ impl GitsyGenerator {
                 "ERROR: a summary output path is invalid: {}",
                 out_path.display()
             ));
-            match tera.render(templ_path, &ctx) {
-                Ok(rendered) => {
-                    global_bytes += self.write_rendered(&out_path, &rendered);
-                }
-                Err(x) => match x.kind {
-                    _ => error!("ERROR: {:?}", x),
-                },
-            }
+            let rendered = tera.render(templ_path, &ctx)?;
+            global_bytes += self.write_rendered(&out_path, &rendered);
         }
         Ok(global_bytes)
     }
