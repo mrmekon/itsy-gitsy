@@ -20,6 +20,8 @@
  * You should have received a copy of the GNU General Public License
  * along with Itsy-Gitsy.  If not, see <http://www.gnu.org/licenses/>.
  */
+use glob::glob;
+use std::error::Error as StdError;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
@@ -83,6 +85,7 @@ pub enum GitsyErrorKind {
     Settings,
     Template,
     Git,
+    Filesystem,
 }
 
 #[derive(Default)]
@@ -126,9 +129,14 @@ impl std::fmt::Display for GitsyError {
             GitsyErrorKind::Git => write!(f, "gitsy error (git)")?,
             GitsyErrorKind::Settings => write!(f, "gitsy error (settings)")?,
             GitsyErrorKind::Template => write!(f, "gitsy error (template)")?,
-            _ => write!(f, "gitsy error (unknown)")?,
+            GitsyErrorKind::Filesystem => write!(f, "gitsy error (filesystem)")?,
+            GitsyErrorKind::Unknown => write!(f, "gitsy error (unknown)")?,
         }
-        write!(f, ": {}", self.msg.as_deref().unwrap_or_default())
+        write!(f, ": {}", self.msg.as_deref().unwrap_or_default())?;
+        if let Some(src) = &self.source {
+            write!(f, " ({})", src)?;
+        }
+        Ok(())
     }
 }
 impl std::fmt::Debug for GitsyError {
@@ -137,8 +145,8 @@ impl std::fmt::Debug for GitsyError {
     }
 }
 impl std::error::Error for GitsyError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.source.as_deref()
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        self.source.as_ref().map(|c| &**c as &(dyn StdError + 'static))
     }
 }
 impl From<git2::Error> for GitsyError {

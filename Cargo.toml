@@ -21,6 +21,7 @@ highlight = ["syntect/default-fancy"]
 chrono = { version = "0.4.23", features=["clock"] }
 clap = { version="4.0.32", features=["derive"] }
 git2 = "0.15.0"
+glob = "0.3.1"
 open = "3.2.0"
 pulldown-cmark = { version = "0.9.2", optional = true }
 rayon = "1.6.1"
@@ -32,3 +33,7 @@ toml = "0.5.10"
 # For SSH passphrase support:
 #pinentry = "0.5.0"
 #secrecy = "0.8.0"
+
+[dev-dependencies]
+flate2 = "1.0.25"
+tar = "0.4.38"
