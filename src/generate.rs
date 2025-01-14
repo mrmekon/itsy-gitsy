@@ -889,6 +889,23 @@ impl GitsyGenerator {
                                 local_bytes = self.write_rendered(&out_path, &rendered);
                                 atomic_repo_bytes.fetch_add(local_bytes, Ordering::SeqCst);
                                 atomic_bytes.fetch_add(local_bytes, Ordering::SeqCst);
+
+                                // Copy readme files to their real filename, so links to readme files remain valid
+                                // across file changes.
+                                if let Some(readmes) = &repo_desc.readme_files {
+                                    for readme in readmes {
+                                        if &file.path == readme {
+                                            let mut pretty_path = PathBuf::from(out_path);
+                                            pretty_path.pop();
+                                            pretty_path.push(&file.path);
+                                            match std::fs::copy(&out_path, &pretty_path) {
+                                                Ok(_) => louder!(" - wrote readme file: {}", pretty_path.to_string_lossy()),
+                                                Err(e) => error!("ERROR: {:?}", e),
+                                            }
+                                        }
+                                    }
+                                };
+
                             }
                             Err(x) => match x.kind {
                                 _ => error!("ERROR: {:?}", x),
