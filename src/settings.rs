@@ -281,7 +281,7 @@ impl GitsySettingsOutputs {
         let asset_path = substitute_path_vars(&tmpl_path, parsed_repo, Some(self));
         let full_path = match repo {
             Some(repo) => {
-                let mut full_path = repo.path().to_owned();
+                let mut full_path = repo.workdir().map(|p| p.to_owned()).unwrap_or_default();
                 full_path.push(asset_path);
                 full_path
             },
