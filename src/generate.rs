@@ -112,6 +112,10 @@ impl GitsyGenerator {
             ctx.insert("site_name", site_name);
         }
         if let Some(site_url) = &self.settings.site_url {
+            let site_url = match site_url.chars().last() {
+                Some('/') => &site_url[0..site_url.len() - 1],
+                _ => site_url,
+            };
             ctx.insert("site_url", site_url);
         }
         if let Some(site_description) = &self.settings.site_description {
